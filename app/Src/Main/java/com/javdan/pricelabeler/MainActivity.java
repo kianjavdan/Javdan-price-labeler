@@ -5,12 +5,15 @@ import android.os.*;
 import android.content.*;
 import android.database.Cursor;
 import android.graphics.*;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.provider.*;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
+
 import org.json.*;
+
 import java.io.*;
 import java.text.DecimalFormat;
 import java.util.*;
@@ -34,17 +37,21 @@ public class MainActivity extends Activity {
     Spinner codeSpinner;
     TextView status, previewStatus;
     EditText labelWidth;
-    CheckBox rialToToman, appendMode;
+    CheckBox rialToToman, appendMode, batchCropCheck;
     int selectedField=-1;
 
     final String[] FONT_VALUES={"DEFAULT","SANS_SERIF","SERIF","MONOSPACE"};
     final String[] FONT_LABELS={"پیش‌فرض","Sans Serif","Serif","Monospace"};
     final String[] ALIGN_LABELS={"راست","وسط","چپ"};
 
+    // Crop is kept separately for each manually-selected image URI.
+    HashMap<String,float[]> cropByImage=new HashMap<>();
+
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.WHITE);
         loadTemplate();
+        loadCropMap();
         buildUi();
         showData();
     }
@@ -305,12 +312,12 @@ public class MainActivity extends Activity {
 
     private void relayoutFields(){
         int n=Math.max(1,fields.size());
-        float top=.08f, gap=.025f;
-        float h=Math.min(.18f,(.82f-gap*(n-1))/n);
+        float top=.045f, gap=.018f;
+        float h=Math.min(.205f,(.91f-gap*(n-1))/n);
 
         for(int i=0;i<fields.size();i++){
             LabelField f=fields.get(i);
-            f.x=.04f; f.w=.92f; f.h=h;
+            f.x=.025f; f.w=.95f; f.h=h;
             f.y=top+i*(h+gap);
         }
     }
@@ -320,73 +327,95 @@ public class MainActivity extends Activity {
         clear();
 
         body.addView(section("طراح حرفه‌ای برچسب"));
-        body.addView(tv("روی هر کادر قیمت بزن و تنظیمات همان کادر را پایین تغییر بده.",13,false));
+        body.addView(tv("فضای لیبل بزرگ‌تر شده. روی عنوان/قیمت/تومان بزن؛ روی عکس بکش برای جابه‌جایی و از دایره بنفش گوشه عکس برای Resize استفاده کن.",13,false));
 
         designer=new LabelDesignerView(this);
         designer.setFields(fields);
         designer.setProductBitmap(currentBitmap);
-        body.addView(designer,new LinearLayout.LayoutParams(-1,900));
+        restoreCropForCurrentImage();
+        body.addView(designer,new LinearLayout.LayoutParams(-1,1050));
 
         designer.setListener(new LabelDesignerView.Listener(){
-            @Override
-            public void onFieldSelected(int i){
+            @Override public void onFieldSelected(int i){
                 selectedField=i;
                 showFieldEditor();
             }
 
-            @Override
-            public void onChanged(){
+            @Override public void onChanged(){
+                saveCurrentImageCrop();
                 saveTemplate();
             }
 
-            @Override
-            public void onTextClicked(int fieldIndex,int part){
+            @Override public void onTextClicked(int fieldIndex,int part){
                 selectedField=fieldIndex;
                 showFontSizeDialog(fieldIndex,part);
             }
         });
 
-        body.addView(section("تنظیمات کلی خروجی"));
-
-        LinearLayout opts=row();
-        appendMode=new CheckBox(this);
-        appendMode.setText("لیبل بیرون تصویر");
-        appendMode.setChecked(true);
-
-        labelWidth=numberEdit("36","عرض لیبل %");
-        opts.addView(appendMode,new LinearLayout.LayoutParams(0,-2,1.2f));
-        opts.addView(labelWidth,new LinearLayout.LayoutParams(0,-2,1));
-        body.addView(opts);
-
         body.addView(section("تصویر محصول"));
+
+        LinearLayout imageTools=row();
+        Button cropButton=btn("✂ کراپ تصویر");
+        Button resetCrop=btn("بازنشانی کراپ");
+        imageTools.addView(cropButton,new LinearLayout.LayoutParams(0,-2,1));
+        imageTools.addView(resetCrop,new LinearLayout.LayoutParams(0,-2,1));
+        body.addView(imageTools);
+
+        cropButton.setOnClickListener(v->{
+            boolean on=!designer.isCropMode();
+            designer.setCropMode(on);
+            cropButton.setText(on?"✓ پایان کراپ":"✂ کراپ تصویر");
+            if(on){
+                Toast.makeText(this,"لبه‌های آبی را بکش. دایره بنفش گوشه عکس همچنان Resize را انجام می‌دهد.",Toast.LENGTH_LONG).show();
+            }else{
+                saveCurrentImageCrop();
+            }
+        });
+
+        resetCrop.setOnClickListener(v->{
+            designer.resetCrop();
+            saveCurrentImageCrop();
+        });
 
         EditText productX=numberEdit(pct(designer.productX),"X %");
         EditText productY=numberEdit(pct(designer.productY),"Y %");
         EditText productW=numberEdit(pct(designer.productW),"عرض %");
         EditText productH=numberEdit(pct(designer.productH),"ارتفاع %");
-        EditText canvasColor=textEdit(colorToHex(designer.canvasBackground),"#FFF2F2F2");
 
         addLabeledEdit(body,"موقعیت افقی تصویر %",productX);
         addLabeledEdit(body,"موقعیت عمودی تصویر %",productY);
         addLabeledEdit(body,"عرض تصویر %",productW);
         addLabeledEdit(body,"ارتفاع تصویر %",productH);
-        addLabeledEdit(body,"رنگ پس‌زمینه طراح",canvasColor);
 
-        Button applyProduct=btn("اعمال تنظیمات تصویر");
+        Button canvasColorButton=makeColorButton("رنگ پس‌زمینه طراح",designer.canvasBackground,color->{
+            designer.canvasBackground=color;
+            designer.invalidate();
+        });
+        body.addView(canvasColorButton);
+
+        Button applyProduct=btn("اعمال تنظیمات عددی تصویر");
         body.addView(applyProduct);
         applyProduct.setOnClickListener(v->{
             designer.productX=clamp(parsePercent(productX,designer.productX),0f,.95f);
             designer.productY=clamp(parsePercent(productY,designer.productY),0f,.95f);
             designer.productW=clamp(parsePercent(productW,designer.productW),.05f,1f-designer.productX);
             designer.productH=clamp(parsePercent(productH,designer.productH),.05f,1f-designer.productY);
-            designer.canvasBackground=parseColorSafe(canvasColor.getText().toString(),designer.canvasBackground);
             designer.invalidate();
-            Toast.makeText(this,"تنظیمات تصویر اعمال شد",Toast.LENGTH_SHORT).show();
         });
 
         Button sample=btn("انتخاب / تغییر عکس نمونه");
         body.addView(sample);
         sample.setOnClickListener(v->pickFile("image/*",PICK_IMAGE));
+
+        body.addView(section("تنظیمات کلی خروجی"));
+
+        appendMode=new CheckBox(this);
+        appendMode.setText("لیبل بیرون تصویر");
+        appendMode.setChecked(true);
+        body.addView(appendMode);
+
+        labelWidth=numberEdit("44","عرض لیبل %");
+        addLabeledEdit(body,"عرض لیبل %",labelWidth);
 
         Button add=btn("+ افزودن کادر قیمت");
         body.addView(add);
@@ -407,13 +436,6 @@ public class MainActivity extends Activity {
             relayoutFields();
             designer.setFields(fields);
             saveTemplate();
-        });
-
-        Button save=btn("ذخیره قالب");
-        body.addView(save);
-        save.setOnClickListener(v->{
-            saveTemplate();
-            Toast.makeText(this,"قالب ذخیره شد",Toast.LENGTH_SHORT).show();
         });
 
         body.addView(section("تنظیمات کادر انتخاب‌شده"));
@@ -458,79 +480,54 @@ public class MainActivity extends Activity {
         root.addView(titleView);
 
         LinearLayout sizeRow=row();
-
-        Button minus=btn("−");
-        Button plus=btn("+");
+        Button minus=btn("▼");
+        Button plus=btn("▲");
         EditText value=numberEdit(String.valueOf(current),"سایز");
         value.setGravity(Gravity.CENTER);
 
         sizeRow.addView(minus,new LinearLayout.LayoutParams(0,-2,1));
         sizeRow.addView(value,new LinearLayout.LayoutParams(0,-2,1.5f));
         sizeRow.addView(plus,new LinearLayout.LayoutParams(0,-2,1));
-
         root.addView(sizeRow);
 
         final int fallback=current;
 
         Runnable applySize=()->{
-            int newSize=parseIntText(value,fallback);
-            newSize=clampInt(newSize,8,140);
+            int newSize=clampInt(parseIntText(value,fallback),8,140);
             value.setText(String.valueOf(newSize));
 
-            if(part==0){
-                f.titleSize=newSize;
-            }else if(part==2){
-                f.tomanSize=newSize;
-            }else{
-                f.priceSize=newSize;
-            }
+            if(part==0)f.titleSize=newSize;
+            else if(part==2)f.tomanSize=newSize;
+            else f.priceSize=newSize;
 
             if(designer!=null)designer.invalidate();
             saveTemplate();
         };
 
         minus.setOnClickListener(v->{
-            int n=parseIntText(value,fallback);
-            value.setText(String.valueOf(Math.max(8,n-1)));
+            value.setText(String.valueOf(Math.max(8,parseIntText(value,fallback)-1)));
             applySize.run();
         });
 
         plus.setOnClickListener(v->{
-            int n=parseIntText(value,fallback);
-            value.setText(String.valueOf(Math.min(140,n+1)));
+            value.setText(String.valueOf(Math.min(140,parseIntText(value,fallback)+1)));
             applySize.run();
         });
 
         Button apply=btn("اعمال");
         root.addView(apply);
-        apply.setOnClickListener(v->{
-            applySize.run();
-            dialog.dismiss();
-            if(fieldEditorContainer!=null)showFieldEditor();
-        });
-
-        Button cancel=btn("انصراف");
-        root.addView(cancel);
-        cancel.setOnClickListener(v->dialog.dismiss());
+        apply.setOnClickListener(v->{ applySize.run(); dialog.dismiss(); });
 
         dialog.setContentView(root);
         dialog.show();
 
         Window w=dialog.getWindow();
-        if(w!=null){
-            w.setLayout(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-        }
+        if(w!=null)w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private int parseIntText(EditText edit,int fallback){
-        try{
-            return Integer.parseInt(edit.getText().toString().trim());
-        }catch(Exception e){
-            return fallback;
-        }
+        try{return Integer.parseInt(edit.getText().toString().trim());}
+        catch(Exception e){return fallback;}
     }
 
     private void showFieldEditor(){
@@ -538,29 +535,13 @@ public class MainActivity extends Activity {
         fieldEditorContainer.removeAllViews();
 
         LabelField f=fields.get(selectedField);
-        TextView selectedLabel=tv("در حال ویرایش: "+f.name,14,true);
-        fieldEditorContainer.addView(selectedLabel);
+        fieldEditorContainer.addView(tv("در حال ویرایش: "+f.name,14,true));
+        fieldEditorContainer.addView(tv("اندازه فونت را با لمس مستقیم متن داخل طراح تغییر بده.",12,false));
 
         EditText name=textEdit(f.name,"نام کادر");
         EditText val=textEdit(f.value,"قیمت");
         addLabeledEdit(fieldEditorContainer,"عنوان",name);
         addLabeledEdit(fieldEditorContainer,"قیمت",val);
-
-        EditText xPct=numberEdit(pct(f.x),"X %");
-        EditText yPct=numberEdit(pct(f.y),"Y %");
-        EditText wPct=numberEdit(pct(f.w),"عرض %");
-        EditText hPct=numberEdit(pct(f.h),"ارتفاع %");
-        addLabeledEdit(fieldEditorContainer,"موقعیت افقی %",xPct);
-        addLabeledEdit(fieldEditorContainer,"موقعیت عمودی %",yPct);
-        addLabeledEdit(fieldEditorContainer,"عرض کادر %",wPct);
-        addLabeledEdit(fieldEditorContainer,"ارتفاع کادر %",hPct);
-
-        EditText titleSize=numberEdit(String.valueOf(f.titleSize),"24");
-        EditText priceSize=numberEdit(String.valueOf(f.priceSize),"34");
-        EditText tomanSize=numberEdit(String.valueOf(f.tomanSize),"15");
-        addLabeledEdit(fieldEditorContainer,"اندازه فونت عنوان",titleSize);
-        addLabeledEdit(fieldEditorContainer,"اندازه فونت قیمت",priceSize);
-        addLabeledEdit(fieldEditorContainer,"اندازه تومان",tomanSize);
 
         Spinner titleFont=makeSpinner(FONT_LABELS,fontIndex(f.titleFont));
         Spinner priceFont=makeSpinner(FONT_LABELS,fontIndex(f.priceFont));
@@ -569,22 +550,26 @@ public class MainActivity extends Activity {
         addLabeledSpinner(fieldEditorContainer,"فونت قیمت",priceFont);
         addLabeledSpinner(fieldEditorContainer,"تراز متن",align);
 
-        EditText titleColor=textEdit(colorToHex(f.titleColor),"#FF333333");
-        EditText priceColor=textEdit(colorToHex(f.priceColor),"#FFC62828");
-        EditText tomanColor=textEdit(colorToHex(f.tomanColor),"#FFC62828");
-        EditText backgroundColor=textEdit(colorToHex(f.backgroundColor),"#FFFFFFFF");
-        EditText borderColor=textEdit(colorToHex(f.borderColor),"#FFD8D8D8");
-        addLabeledEdit(fieldEditorContainer,"رنگ عنوان",titleColor);
-        addLabeledEdit(fieldEditorContainer,"رنگ قیمت",priceColor);
-        addLabeledEdit(fieldEditorContainer,"رنگ تومان",tomanColor);
-        addLabeledEdit(fieldEditorContainer,"رنگ پس‌زمینه کادر",backgroundColor);
-        addLabeledEdit(fieldEditorContainer,"رنگ حاشیه کادر",borderColor);
+        fieldEditorContainer.addView(section("رنگ‌بندی لمسی"));
+
+        Button titleColor=makeColorButton("رنگ عنوان",f.titleColor,color->f.titleColor=color);
+        Button priceColor=makeColorButton("رنگ قیمت",f.priceColor,color->f.priceColor=color);
+        Button tomanColor=makeColorButton("رنگ تومان",f.tomanColor,color->f.tomanColor=color);
+        Button backgroundColor=makeColorButton("رنگ پس‌زمینه کادر",f.backgroundColor,color->f.backgroundColor=color);
+        Button borderColor=makeColorButton("رنگ حاشیه کادر",f.borderColor,color->f.borderColor=color);
+
+        fieldEditorContainer.addView(titleColor);
+        fieldEditorContainer.addView(priceColor);
+        fieldEditorContainer.addView(tomanColor);
+        fieldEditorContainer.addView(backgroundColor);
+        fieldEditorContainer.addView(borderColor);
 
         EditText borderWidth=numberEdit(String.valueOf(f.borderWidth),"2");
         EditText radius=numberEdit(String.valueOf(f.cornerRadius),"18");
         EditText padH=numberEdit(String.valueOf(f.paddingHorizontal),"18");
         EditText padV=numberEdit(String.valueOf(f.paddingVertical),"12");
         EditText titleGap=numberEdit(String.valueOf(f.titlePriceGap),"6");
+
         addLabeledEdit(fieldEditorContainer,"ضخامت حاشیه",borderWidth);
         addLabeledEdit(fieldEditorContainer,"گردی گوشه‌ها",radius);
         addLabeledEdit(fieldEditorContainer,"فاصله داخلی افقی",padH);
@@ -613,36 +598,17 @@ public class MainActivity extends Activity {
 
         Button apply=btn("اعمال تنظیمات این کادر");
         fieldEditorContainer.addView(apply);
-
         apply.setOnClickListener(v->{
             f.name=name.getText().toString().trim();
             f.value=val.getText().toString().trim();
-
-            f.x=clamp(parsePercent(xPct,f.x),0f,.98f);
-            f.y=clamp(parsePercent(yPct,f.y),0f,.98f);
-            f.w=clamp(parsePercent(wPct,f.w),.05f,1f-f.x);
-            f.h=clamp(parsePercent(hPct,f.h),.04f,1f-f.y);
-
-            f.titleSize=parseIntSafe(titleSize,f.titleSize,8,100);
-            f.priceSize=parseIntSafe(priceSize,f.priceSize,10,140);
-            f.tomanSize=parseIntSafe(tomanSize,f.tomanSize,8,60);
-
             f.titleFont=FONT_VALUES[titleFont.getSelectedItemPosition()];
             f.priceFont=FONT_VALUES[priceFont.getSelectedItemPosition()];
             f.textAlign=align.getSelectedItemPosition();
-
-            f.titleColor=parseColorSafe(titleColor.getText().toString(),f.titleColor);
-            f.priceColor=parseColorSafe(priceColor.getText().toString(),f.priceColor);
-            f.tomanColor=parseColorSafe(tomanColor.getText().toString(),f.tomanColor);
-            f.backgroundColor=parseColorSafe(backgroundColor.getText().toString(),f.backgroundColor);
-            f.borderColor=parseColorSafe(borderColor.getText().toString(),f.borderColor);
-
             f.borderWidth=parseIntSafe(borderWidth,f.borderWidth,0,30);
             f.cornerRadius=parseIntSafe(radius,f.cornerRadius,0,100);
             f.paddingHorizontal=parseIntSafe(padH,f.paddingHorizontal,0,100);
             f.paddingVertical=parseIntSafe(padV,f.paddingVertical,0,100);
             f.titlePriceGap=parseIntSafe(titleGap,f.titlePriceGap,0,100);
-
             f.strike=strike.isChecked();
             f.showToman=showToman.isChecked();
             f.visible=visible.isChecked();
@@ -655,12 +621,10 @@ public class MainActivity extends Activity {
 
             designer.setFields(fields);
             designer.select(selectedField);
-            selectedLabel.setText("در حال ویرایش: "+f.name);
             saveTemplate();
-            Toast.makeText(this,"تنظیمات کادر اعمال شد",Toast.LENGTH_SHORT).show();
         });
 
-        Button copyStyle=btn("کپی استایل این کادر برای همه");
+        Button copyStyle=btn("اعمال همین استایل برای همه کادرها");
         fieldEditorContainer.addView(copyStyle);
         copyStyle.setOnClickListener(v->{
             for(int i=0;i<fields.size();i++){
@@ -668,7 +632,7 @@ public class MainActivity extends Activity {
             }
             designer.setFields(fields);
             saveTemplate();
-            Toast.makeText(this,"استایل برای همه کادرها کپی شد",Toast.LENGTH_SHORT).show();
+            Toast.makeText(this,"استایل برای همه کادرها اعمال شد",Toast.LENGTH_SHORT).show();
         });
 
         Button del=btn("حذف این کادر");
@@ -700,6 +664,13 @@ public class MainActivity extends Activity {
 
         body.addView(section("خروجی"));
 
+        batchCropCheck=new CheckBox(this);
+        batchCropCheck.setText("اعمال کراپ عکس نمونه روی همه تصاویر خروجی گروهی");
+        batchCropCheck.setChecked(false);
+        body.addView(batchCropCheck);
+
+        body.addView(tv("خاموش = هر تصویر گروهی بدون کراپ عمومی ساخته می‌شود. روشن = کراپ فعلی نمونه روی همه اعمال می‌شود.",12,false));
+
         Button preview=btn("پیش‌نمایش خروجی نهایی");
         body.addView(preview); preview.setOnClickListener(v->makePreview());
 
@@ -719,21 +690,30 @@ public class MainActivity extends Activity {
             return;
         }
 
-        Bitmap out=render(currentBitmap,fields);
+        Bitmap out=render(currentBitmap,fields,true);
         ImageView iv=new ImageView(this);
         iv.setAdjustViewBounds(true); iv.setImageBitmap(out);
         body.addView(iv,Math.min(body.getWidth()>0?body.getWidth():1000,1000),-2);
         previewStatus.setText("پیش‌نمایش ساخته شد.");
     }
 
-    private Bitmap render(Bitmap src,ArrayList<LabelField> useFields){
+    private Bitmap render(Bitmap src,ArrayList<LabelField> useFields,boolean useCurrentCrop){
         LabelDesignerView r=new LabelDesignerView(this);
         r.setFields(useFields);
 
+        if(useCurrentCrop && designer!=null){
+            r.setCrop(designer.cropLeft,designer.cropTop,designer.cropRight,designer.cropBottom);
+        }else if(useCurrentCrop){
+            float[] c=getCurrentImageCrop();
+            r.setCrop(c[0],c[1],c[2],c[3]);
+        }else{
+            r.setCrop(0f,0f,1f,1f);
+        }
+
         boolean append=appendMode==null||appendMode.isChecked();
-        float width=.36f;
+        float width=.44f;
         try{
-            width=Float.parseFloat(labelWidth==null?"36":labelWidth.getText().toString())/100f;
+            width=Float.parseFloat(labelWidth==null?"44":labelWidth.getText().toString())/100f;
         }catch(Exception ignored){}
 
         return r.renderFinal(src,Color.WHITE,0xFFD8D8D8,append,width);
@@ -746,7 +726,7 @@ public class MainActivity extends Activity {
         }
 
         try{
-            Bitmap out=render(currentBitmap,fields);
+            Bitmap out=render(currentBitmap,fields,true);
             saveToGallery(out,"Javdan_"+System.currentTimeMillis()+".jpg");
             Toast.makeText(this,"در Pictures/JavdanPriceLabeler ذخیره شد",Toast.LENGTH_LONG).show();
         }catch(Exception e){
@@ -796,12 +776,19 @@ public class MainActivity extends Activity {
 
         try{
             if(req==PICK_IMAGE){
+                saveCurrentImageCrop();
                 imageUri=u;
+
                 try(InputStream in=getContentResolver().openInputStream(u)){
                     currentBitmap=BitmapFactory.decodeStream(in);
                 }
+
                 status.setText("عکس انتخاب شد");
-                if(designer!=null)designer.setProductBitmap(currentBitmap);
+
+                if(designer!=null){
+                    designer.setProductBitmap(currentBitmap);
+                    restoreCropForCurrentImage();
+                }
 
             }else if(req==PICK_EXCEL){
                 excelUri=u;
@@ -876,32 +863,21 @@ public class MainActivity extends Activity {
                 }
 
                 int extraImages=0;
-                ArrayList<String> extraImageCodes=new ArrayList<>();
-
                 for(String imageCode:images.keySet()){
-                    if(!excelCodes.contains(imageCode)){
-                        extraImages++;
-                        if(extraImageCodes.size()<20)extraImageCodes.add(imageCode);
-                    }
+                    if(!excelCodes.contains(imageCode))extraImages++;
                 }
 
-                final int fExcelCodeCount=excelCodeCount;
                 final int fMatched=matched;
                 final int fMissingImages=missingImages;
                 final int fExtraImages=extraImages;
                 final int totalImages=images.size();
-
-                final String missingText=missingCodes.isEmpty()?"-":android.text.TextUtils.join("، ",missingCodes);
-                final String extraText=extraImageCodes.isEmpty()?"-":android.text.TextUtils.join("، ",extraImageCodes);
 
                 runOnUiThread(()->{
                     status.setText("تطبیق انجام شد — موفق: "+fMatched+" | بدون عکس: "+fMissingImages);
 
                     if(excelInfo!=null){
                         excelInfo.removeAllViews();
-                        excelInfo.addView(tv("ردیف‌های Excel: "+excelRows.size()+" | ستون‌ها: "+headers.size(),13,false));
-                        excelInfo.addView(tv("کدهای محصول: "+fExcelCodeCount,14,true));
-                        excelInfo.addView(tv("تعداد عکس‌های پوشه: "+totalImages,14,false));
+                        excelInfo.addView(tv("ردیف‌های Excel: "+excelRows.size()+" | عکس‌ها: "+totalImages,13,false));
 
                         TextView okView=tv("✓ تطبیق موفق: "+fMatched,16,true);
                         okView.setTextColor(0xFF168A3B);
@@ -911,13 +887,9 @@ public class MainActivity extends Activity {
                         missingView.setTextColor(0xFFC62828);
                         excelInfo.addView(missingView);
 
-                        if(fMissingImages>0)excelInfo.addView(tv("نمونه کدهای بدون عکس:\n"+missingText,12,false));
-
                         TextView extraView=tv("عکس‌های بدون کد در Excel: "+fExtraImages,14,true);
                         extraView.setTextColor(0xFFE28A00);
                         excelInfo.addView(extraView);
-
-                        if(fExtraImages>0)excelInfo.addView(tv("نمونه عکس‌های اضافی:\n"+extraText,12,false));
 
                         if(fMatched>0){
                             Button goOutput=btn("ادامه و ساخت خروجی گروهی");
@@ -925,27 +897,17 @@ public class MainActivity extends Activity {
                             goOutput.setOnClickListener(v->showOutput());
                         }
                     }
-
-                    Toast.makeText(this,"بررسی تمام شد — تطبیق: "+fMatched+" | بدون عکس: "+fMissingImages+" | عکس اضافی: "+fExtraImages,Toast.LENGTH_LONG).show();
                 });
 
             }catch(Exception e){
-                runOnUiThread(()->{
-                    status.setText("خطا در بررسی تطبیق");
-                    Toast.makeText(this,"خطا: "+safeMessage(e),Toast.LENGTH_LONG).show();
-                });
+                runOnUiThread(()->Toast.makeText(this,"خطا: "+safeMessage(e),Toast.LENGTH_LONG).show());
             }
         }).start();
     }
 
     private boolean isPriceColumn(String header){
         if(header==null)return false;
-
-        String h=header.trim()
-                .replace("ي","ی")
-                .replace("ك","ک")
-                .toLowerCase(Locale.ROOT);
-
+        String h=header.trim().replace("ي","ی").replace("ك","ک").toLowerCase(Locale.ROOT);
         return h.contains("قیمت");
     }
 
@@ -961,9 +923,12 @@ public class MainActivity extends Activity {
         }
 
         status.setText("در حال ساخت خروجی گروهی...");
-        Toast.makeText(this,"ساخت خروجی گروهی شروع شد...",Toast.LENGTH_SHORT).show();
-
         final boolean convert=rialToToman==null||rialToToman.isChecked();
+        final boolean applyGroupCrop=batchCropCheck!=null&&batchCropCheck.isChecked();
+
+        final float[] groupCrop = designer!=null
+                ? new float[]{designer.cropLeft,designer.cropTop,designer.cropRight,designer.cropBottom}
+                : getCurrentImageCrop();
 
         new Thread(()->{
             int ok=0,missing=0,errors=0;
@@ -999,29 +964,44 @@ public class MainActivity extends Activity {
                         if(src==null){errors++;continue;}
 
                         ArrayList<LabelField> fs=new ArrayList<>();
+                        int styleIndex=0;
 
-                        for(int i=0;i<priceHeaders.size();i++){
-                            String h=priceHeaders.get(i);
+                        for(String h:priceHeaders){
                             String raw=row.get(h);
-
                             if(raw==null||raw.trim().isEmpty())continue;
 
                             LabelField f=new LabelField(h.trim(),formatPrice(raw,convert));
 
-                            if(i<fields.size())copyStyleOnly(fields.get(i),f);
+                            if(styleIndex<fields.size())copyStyleOnly(fields.get(styleIndex),f);
                             else if(!fields.isEmpty())copyStyleOnly(fields.get(fields.size()-1),f);
 
                             fs.add(f);
+                            styleIndex++;
                         }
 
                         layoutBatchFields(fs);
 
-                        Bitmap out=render(src,fs);
+                        LabelDesignerView renderer=new LabelDesignerView(this);
+                        renderer.setFields(fs);
+
+                        if(applyGroupCrop){
+                            renderer.setCrop(groupCrop[0],groupCrop[1],groupCrop[2],groupCrop[3]);
+                        }else{
+                            renderer.setCrop(0f,0f,1f,1f);
+                        }
+
+                        boolean append=appendMode==null||appendMode.isChecked();
+                        float width=.44f;
+                        try{
+                            width=Float.parseFloat(labelWidth==null?"44":labelWidth.getText().toString())/100f;
+                        }catch(Exception ignored){}
+
+                        Bitmap out=renderer.renderFinal(src,Color.WHITE,0xFFD8D8D8,append,width);
                         saveToGallery(out,code+".jpg");
                         ok++;
 
-                        src.recycle();
-                        if(out!=src&&!out.isRecycled())out.recycle();
+                        if(src!=null&&!src.isRecycled())src.recycle();
+                        if(out!=null&&!out.isRecycled())out.recycle();
 
                     }catch(Exception e){errors++;}
                 }
@@ -1040,12 +1020,12 @@ public class MainActivity extends Activity {
 
     private void layoutBatchFields(ArrayList<LabelField> fs){
         int n=Math.max(1,fs.size());
-        float top=.08f,gap=.025f;
-        float h=Math.min(.18f,(.82f-gap*(n-1))/n);
+        float top=.045f,gap=.018f;
+        float h=Math.min(.205f,(.91f-gap*(n-1))/n);
 
         for(int i=0;i<fs.size();i++){
             LabelField f=fs.get(i);
-            f.x=.04f; f.w=.92f; f.h=h;
+            f.x=.025f; f.w=.95f; f.h=h;
             f.y=top+i*(h+gap);
         }
     }
@@ -1054,40 +1034,32 @@ public class MainActivity extends Activity {
         to.titleSize=from.titleSize;
         to.priceSize=from.priceSize;
         to.tomanSize=from.tomanSize;
-
         to.titleColor=from.titleColor;
         to.priceColor=from.priceColor;
         to.tomanColor=from.tomanColor;
-
         to.backgroundColor=from.backgroundColor;
         to.borderColor=from.borderColor;
         to.borderWidth=from.borderWidth;
         to.cornerRadius=from.cornerRadius;
-
         to.paddingHorizontal=from.paddingHorizontal;
         to.paddingVertical=from.paddingVertical;
         to.titlePriceGap=from.titlePriceGap;
-
         to.strike=from.strike;
         to.showToman=from.showToman;
         to.visible=from.visible;
-
         to.titleBold=from.titleBold;
         to.titleItalic=from.titleItalic;
         to.priceBold=from.priceBold;
         to.priceItalic=from.priceItalic;
-
         to.textAlign=from.textAlign;
         to.titleFont=from.titleFont;
         to.priceFont=from.priceFont;
-
         to.showTitle=from.showTitle;
         to.showPrice=from.showPrice;
     }
 
     private HashMap<String,Uri> listTreeImages(Uri tree)throws Exception{
         HashMap<String,Uri> map=new HashMap<>();
-
         String docId=DocumentsContract.getTreeDocumentId(tree);
         Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,docId);
 
@@ -1126,6 +1098,63 @@ public class MainActivity extends Activity {
         return s;
     }
 
+    private void saveCurrentImageCrop(){
+        if(imageUri==null||designer==null)return;
+        cropByImage.put(imageUri.toString(),new float[]{
+                designer.cropLeft,designer.cropTop,designer.cropRight,designer.cropBottom
+        });
+        saveCropMap();
+    }
+
+    private void restoreCropForCurrentImage(){
+        if(designer==null)return;
+        float[] c=getCurrentImageCrop();
+        designer.setCrop(c[0],c[1],c[2],c[3]);
+    }
+
+    private float[] getCurrentImageCrop(){
+        if(imageUri==null)return new float[]{0f,0f,1f,1f};
+        float[] c=cropByImage.get(imageUri.toString());
+        return c==null?new float[]{0f,0f,1f,1f}:c;
+    }
+
+    private void saveCropMap(){
+        try{
+            JSONObject root=new JSONObject();
+            for(Map.Entry<String,float[]> e:cropByImage.entrySet()){
+                float[] c=e.getValue();
+                JSONArray a=new JSONArray();
+                a.put(c[0]);a.put(c[1]);a.put(c[2]);a.put(c[3]);
+                root.put(e.getKey(),a);
+            }
+            getSharedPreferences("javdan",MODE_PRIVATE).edit()
+                    .putString("cropByImage",root.toString()).apply();
+        }catch(Exception ignored){}
+    }
+
+    private void loadCropMap(){
+        cropByImage.clear();
+        String raw=getSharedPreferences("javdan",MODE_PRIVATE).getString("cropByImage","");
+        if(raw.isEmpty())return;
+
+        try{
+            JSONObject root=new JSONObject(raw);
+            Iterator<String> keys=root.keys();
+            while(keys.hasNext()){
+                String k=keys.next();
+                JSONArray a=root.optJSONArray(k);
+                if(a!=null&&a.length()>=4){
+                    cropByImage.put(k,new float[]{
+                            (float)a.optDouble(0,0),
+                            (float)a.optDouble(1,0),
+                            (float)a.optDouble(2,1),
+                            (float)a.optDouble(3,1)
+                    });
+                }
+            }
+        }catch(Exception ignored){}
+    }
+
     private void saveTemplate(){
         try{
             JSONArray a=new JSONArray();
@@ -1142,8 +1171,7 @@ public class MainActivity extends Activity {
     private void loadTemplate(){
         fields.clear();
 
-        String s=getSharedPreferences("javdan",MODE_PRIVATE)
-                .getString("fields","");
+        String s=getSharedPreferences("javdan",MODE_PRIVATE).getString("fields","");
 
         if(!s.isEmpty()){
             try{
@@ -1159,11 +1187,9 @@ public class MainActivity extends Activity {
 
     private int fontIndex(String font){
         if(font==null)return 0;
-
         for(int i=0;i<FONT_VALUES.length;i++){
             if(FONT_VALUES[i].equals(font))return i;
         }
-
         return 0;
     }
 
@@ -1186,19 +1212,6 @@ public class MainActivity extends Activity {
         }catch(Exception ex){return fallback;}
     }
 
-    private int parseColorSafe(String raw,int fallback){
-        try{
-            String s=raw==null?"":raw.trim();
-            if(s.isEmpty())return fallback;
-            if(!s.startsWith("#"))s="#"+s;
-            return Color.parseColor(s);
-        }catch(Exception e){return fallback;}
-    }
-
-    private String colorToHex(int color){
-        return String.format(Locale.US,"#%08X",color);
-    }
-
     private float clamp(float v,float min,float max){
         return Math.max(min,Math.min(max,v));
     }
@@ -1211,5 +1224,97 @@ public class MainActivity extends Activity {
         if(e==null)return "خطای نامشخص";
         String m=e.getMessage();
         return (m==null||m.trim().isEmpty())?e.getClass().getSimpleName():m;
+    }
+
+    interface ColorSelectedListener{
+        void onColorSelected(int color);
+    }
+
+    private Button makeColorButton(String title,int currentColor,ColorSelectedListener listener){
+        Button b=btn(title);
+        applyButtonColor(b,currentColor);
+
+        b.setOnClickListener(v->showColorPalette(title,currentColor,color->{
+            listener.onColorSelected(color);
+            saveTemplate();
+            if(designer!=null)designer.invalidate();
+            if(fieldEditorContainer!=null&&selectedField>=0)showFieldEditor();
+        }));
+
+        return b;
+    }
+
+    private void applyButtonColor(Button button,int color){
+        GradientDrawable bg=new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(18);
+        bg.setStroke(2,0xFFBDBDBD);
+        button.setBackground(bg);
+
+        double darkness=1-(0.299*Color.red(color)+0.587*Color.green(color)+0.114*Color.blue(color))/255;
+        button.setTextColor(darkness>=0.5?Color.WHITE:Color.BLACK);
+    }
+
+    private void showColorPalette(String title,int currentColor,final ColorSelectedListener listener){
+        final Dialog dialog=new Dialog(this);
+
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(30,25,30,25);
+
+        TextView titleView=tv(title,20,true);
+        titleView.setGravity(Gravity.CENTER);
+        root.addView(titleView);
+
+        final int[] colors={
+                0xFFFFFFFF,0xFFF5F5F5,0xFFE0E0E0,0xFF9E9E9E,0xFF616161,
+                0xFF212121,0xFFFFCDD2,0xFFEF5350,0xFFC62828,0xFF8E0000,
+                0xFFFFE0B2,0xFFFF9800,0xFFEF6C00,0xFFFFF9C4,0xFFFFEB3B,
+                0xFFF9A825,0xFFC8E6C9,0xFF66BB6A,0xFF2E7D32,0xFF1B5E20,
+                0xFFB2DFDB,0xFF26A69A,0xFF00796B,0xFFBBDEFB,0xFF42A5F5,
+                0xFF1976D2,0xFF0D47A1,0xFFD1C4E9,0xFF7E57C2,0xFF512DA8,
+                0xFFF8BBD0,0xFFEC407A,0xFFC2185B,0xFFFFF3E0,0xFFE3F2FD,
+                0xFFE8F5E9,0xFFF3E5F5
+        };
+
+        GridLayout grid=new GridLayout(this);
+        grid.setColumnCount(5);
+
+        int size=(int)(55*getResources().getDisplayMetrics().density);
+        int margin=(int)(5*getResources().getDisplayMetrics().density);
+
+        for(final int color:colors){
+            TextView box=new TextView(this);
+
+            GradientDrawable bg=new GradientDrawable();
+            bg.setColor(color);
+            bg.setCornerRadius(14);
+            bg.setStroke(color==currentColor?5:2,color==currentColor?0xFF1976D2:0xFFBDBDBD);
+            box.setBackground(bg);
+
+            GridLayout.LayoutParams p=new GridLayout.LayoutParams();
+            p.width=size; p.height=size;
+            p.setMargins(margin,margin,margin,margin);
+            box.setLayoutParams(p);
+
+            box.setOnClickListener(v->{
+                listener.onColorSelected(color);
+                dialog.dismiss();
+            });
+
+            grid.addView(box);
+        }
+
+        root.addView(grid);
+
+        Button cancel=btn("انصراف");
+        root.addView(cancel);
+        cancel.setOnClickListener(v->dialog.dismiss());
+
+        dialog.setContentView(root);
+        dialog.show();
+
+        Window window=dialog.getWindow();
+        if(window!=null)window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 }
