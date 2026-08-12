@@ -22,40 +22,27 @@ public class MainActivity extends Activity {
     static final int PICK_IMAGE = 11;
     static final int PICK_FOLDER = 12;
 
-    LinearLayout body;
-    LinearLayout manualRows;
-    LinearLayout excelInfo;
-    LinearLayout fieldEditorContainer;
+    LinearLayout body, manualRows, excelInfo, fieldEditorContainer;
+    Button tabData, tabDesigner, tabOutput;
 
-    Button tabData;
-    Button tabDesigner;
-    Button tabOutput;
+    RadioButton modeExcel, modeManual;
 
-    RadioButton modeExcel;
-    RadioButton modeManual;
-
-    Uri excelUri;
-    Uri imageUri;
-    Uri folderUri;
-
+    Uri excelUri, imageUri, folderUri;
     Bitmap currentBitmap;
 
     LabelDesignerView designer;
 
     ArrayList<LabelField> fields = new ArrayList<>();
-    ArrayList<LinkedHashMap<String, String>> excelRows =
-            new ArrayList<>();
+    ArrayList<LinkedHashMap<String, String>> excelRows = new ArrayList<>();
     ArrayList<String> headers = new ArrayList<>();
 
     Spinner codeSpinner;
 
-    TextView status;
-    TextView previewStatus;
+    TextView status, previewStatus;
 
     EditText labelWidth;
 
-    CheckBox rialToToman;
-    CheckBox appendMode;
+    CheckBox rialToToman, appendMode;
 
     int selectedField = -1;
 
@@ -65,7 +52,6 @@ public class MainActivity extends Activity {
 
     @Override
     public void onCreate(Bundle b) {
-
         super.onCreate(b);
 
         getWindow().setStatusBarColor(Color.WHITE);
@@ -76,12 +62,7 @@ public class MainActivity extends Activity {
     }
 
 
-    private TextView tv(
-            String s,
-            int sp,
-            boolean bold
-    ) {
-
+    private TextView tv(String s, int sp, boolean bold) {
         TextView t = new TextView(this);
 
         t.setText(s);
@@ -89,9 +70,7 @@ public class MainActivity extends Activity {
         t.setTextColor(0xFF222222);
 
         if (bold) {
-            t.setTypeface(
-                    android.graphics.Typeface.DEFAULT_BOLD
-            );
+            t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         }
 
         t.setPadding(8, 8, 8, 8);
@@ -101,51 +80,27 @@ public class MainActivity extends Activity {
 
 
     private Button btn(String s) {
-
         Button b = new Button(this);
-
         b.setText(s);
         b.setAllCaps(false);
-
         return b;
     }
 
 
     private LinearLayout row() {
-
         LinearLayout l = new LinearLayout(this);
-
-        l.setOrientation(
-                LinearLayout.HORIZONTAL
-        );
-
+        l.setOrientation(LinearLayout.HORIZONTAL);
         return l;
     }
 
 
     private void buildUi() {
+        LinearLayout root = new LinearLayout(this);
 
-        LinearLayout root =
-                new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(16, 16, 16, 12);
 
-        root.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        root.setPadding(
-                16,
-                16,
-                16,
-                12
-        );
-
-        root.addView(
-                tv(
-                        "Javdan Price Labeler",
-                        24,
-                        true
-                )
-        );
+        root.addView(tv("Javdan Price Labeler", 24, true));
 
         root.addView(
                 tv(
@@ -155,184 +110,98 @@ public class MainActivity extends Activity {
                 )
         );
 
-
         LinearLayout tabs = row();
 
-        tabData =
-                btn("Excel / دستی");
-
-        tabDesigner =
-                btn("طراح برچسب");
-
-        tabOutput =
-                btn("خروجی");
-
+        tabData = btn("Excel / دستی");
+        tabDesigner = btn("طراح برچسب");
+        tabOutput = btn("خروجی");
 
         tabs.addView(
                 tabData,
-                new LinearLayout.LayoutParams(
-                        0,
-                        -2,
-                        1
-                )
+                new LinearLayout.LayoutParams(0, -2, 1)
         );
 
         tabs.addView(
                 tabDesigner,
-                new LinearLayout.LayoutParams(
-                        0,
-                        -2,
-                        1
-                )
+                new LinearLayout.LayoutParams(0, -2, 1)
         );
 
         tabs.addView(
                 tabOutput,
-                new LinearLayout.LayoutParams(
-                        0,
-                        -2,
-                        1
-                )
+                new LinearLayout.LayoutParams(0, -2, 1)
         );
 
         root.addView(tabs);
 
+        ScrollView sv = new ScrollView(this);
 
-        ScrollView sv =
-                new ScrollView(this);
-
-        body =
-                new LinearLayout(this);
-
-        body.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        body.setPadding(
-                4,
-                12,
-                4,
-                80
-        );
+        body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(4, 12, 4, 80);
 
         sv.addView(body);
 
         root.addView(
                 sv,
-                new LinearLayout.LayoutParams(
-                        -1,
-                        0,
-                        1
-                )
+                new LinearLayout.LayoutParams(-1, 0, 1)
         );
 
-
-        status =
-                tv(
-                        "آفلاین • بدون آپلود • عکس اصلی تغییر نمی‌کند",
-                        12,
-                        false
-                );
+        status = tv(
+                "آفلاین • بدون آپلود • عکس اصلی تغییر نمی‌کند",
+                12,
+                false
+        );
 
         root.addView(status);
 
         setContentView(root);
 
-
-        tabData.setOnClickListener(
-                v -> showData()
-        );
-
-        tabDesigner.setOnClickListener(
-                v -> showDesigner()
-        );
-
-        tabOutput.setOnClickListener(
-                v -> showOutput()
-        );
+        tabData.setOnClickListener(v -> showData());
+        tabDesigner.setOnClickListener(v -> showDesigner());
+        tabOutput.setOnClickListener(v -> showOutput());
     }
 
 
     private void clear() {
-
         body.removeAllViews();
     }
 
 
     private void showData() {
-
         clear();
 
-        RadioGroup rg =
-                new RadioGroup(this);
+        RadioGroup rg = new RadioGroup(this);
+        rg.setOrientation(RadioGroup.HORIZONTAL);
 
-        rg.setOrientation(
-                RadioGroup.HORIZONTAL
-        );
-
-        modeExcel =
-                new RadioButton(this);
-
+        modeExcel = new RadioButton(this);
         modeExcel.setText("Excel");
 
-
-        modeManual =
-                new RadioButton(this);
-
-        modeManual.setText(
-                "ورود دستی"
-        );
-
+        modeManual = new RadioButton(this);
+        modeManual.setText("ورود دستی");
 
         rg.addView(modeExcel);
         rg.addView(modeManual);
 
         body.addView(rg);
 
+        modeManual.setChecked(excelUri == null);
+        modeExcel.setChecked(excelUri != null);
 
-        modeManual.setChecked(
-                excelUri == null
-        );
+        modeExcel.setOnClickListener(v -> renderDataContent(true));
+        modeManual.setOnClickListener(v -> renderDataContent(false));
 
-        modeExcel.setChecked(
-                excelUri != null
-        );
-
-
-        modeExcel.setOnClickListener(
-                v -> renderDataContent(true)
-        );
-
-        modeManual.setOnClickListener(
-                v -> renderDataContent(false)
-        );
-
-
-        renderDataContent(
-                modeExcel.isChecked()
-        );
+        renderDataContent(modeExcel.isChecked());
     }
 
 
-    private void renderDataContent(
-            boolean excel
-    ) {
-
-        while (
-                body.getChildCount() > 1
-        ) {
-
+    private void renderDataContent(boolean excel) {
+        while (body.getChildCount() > 1) {
             body.removeViewAt(1);
         }
 
-
         if (excel) {
 
-            Button pe =
-                    btn(
-                            "انتخاب فایل Excel (.xlsx)"
-                    );
-
+            Button pe = btn("انتخاب فایل Excel (.xlsx)");
             body.addView(pe);
 
             pe.setOnClickListener(
@@ -342,36 +211,17 @@ public class MainActivity extends Activity {
                     )
             );
 
-
-            Button pf =
-                    btn(
-                            "انتخاب پوشه عکس محصولات"
-                    );
-
+            Button pf = btn("انتخاب پوشه عکس محصولات");
             body.addView(pf);
 
-            pf.setOnClickListener(
-                    v -> pickFolder()
-            );
+            pf.setOnClickListener(v -> pickFolder());
 
+            body.addView(tv("ستون کد محصول:", 14, true));
 
-            body.addView(
-                    tv(
-                            "ستون کد محصول:",
-                            14,
-                            true
-                    )
-            );
-
-
-            codeSpinner =
-                    new Spinner(this);
-
+            codeSpinner = new Spinner(this);
             body.addView(codeSpinner);
 
-
-            rialToToman =
-                    new CheckBox(this);
+            rialToToman = new CheckBox(this);
 
             rialToToman.setText(
                     "تبدیل ریال به تومان (÷۱۰)"
@@ -381,30 +231,19 @@ public class MainActivity extends Activity {
 
             body.addView(rialToToman);
 
-
-            excelInfo =
-                    new LinearLayout(this);
-
-            excelInfo.setOrientation(
-                    LinearLayout.VERTICAL
-            );
+            excelInfo = new LinearLayout(this);
+            excelInfo.setOrientation(LinearLayout.VERTICAL);
 
             body.addView(excelInfo);
 
-
             if (!headers.isEmpty()) {
-
                 refreshExcelUi();
             }
 
-
             Button validate =
-                    btn(
-                            "بررسی تطبیق Excel و تصاویر"
-                    );
+                    btn("بررسی تطبیق Excel و تصاویر");
 
             body.addView(validate);
-
 
             validate.setOnClickListener(
                     v -> validateBatch()
@@ -413,18 +252,11 @@ public class MainActivity extends Activity {
         } else {
 
             body.addView(
-                    tv(
-                            "حالت دستی",
-                            18,
-                            true
-                    )
+                    tv("حالت دستی", 18, true)
             );
 
-
             Button pi =
-                    btn(
-                            "انتخاب / دراپ عکس از گالری یا Files"
-                    );
+                    btn("انتخاب / دراپ عکس از گالری یا Files");
 
             body.addView(pi);
 
@@ -435,7 +267,6 @@ public class MainActivity extends Activity {
                     )
             );
 
-
             rialToToman =
                     new CheckBox(this);
 
@@ -445,7 +276,6 @@ public class MainActivity extends Activity {
 
             body.addView(rialToToman);
 
-
             body.addView(
                     tv(
                             "نام و قیمت هر ردیف را خودت می‌توانی تغییر بدهی:",
@@ -454,36 +284,25 @@ public class MainActivity extends Activity {
                     )
             );
 
-
-            manualRows =
-                    new LinearLayout(this);
-
+            manualRows = new LinearLayout(this);
             manualRows.setOrientation(
                     LinearLayout.VERTICAL
             );
 
             body.addView(manualRows);
 
-
             if (fields.isEmpty()) {
-
                 makeDefaults();
             }
 
-
             rebuildManualRows();
 
-
             Button add =
-                    btn(
-                            "+ افزودن قیمت جدید"
-                    );
+                    btn("+ افزودن قیمت جدید");
 
             body.addView(add);
 
-
             add.setOnClickListener(v -> {
-
                 syncManualRows();
 
                 fields.add(
@@ -494,23 +313,16 @@ public class MainActivity extends Activity {
                 );
 
                 relayoutFields();
-
                 rebuildManualRows();
             });
 
-
             Button go =
-                    btn(
-                            "ذخیره قیمت‌ها و رفتن به طراح"
-                    );
+                    btn("ذخیره قیمت‌ها و رفتن به طراح");
 
             body.addView(go);
 
-
             go.setOnClickListener(v -> {
-
                 syncManualRows();
-
                 showDesigner();
             });
         }
@@ -518,7 +330,6 @@ public class MainActivity extends Activity {
 
 
     private void makeDefaults() {
-
         fields.add(
                 new LabelField(
                         "قیمت مصرف کننده",
@@ -535,14 +346,14 @@ public class MainActivity extends Activity {
 
         fields.add(
                 new LabelField(
-                        "قیمت شماره ۱",
+                        "قیمت حجم متوسط",
                         ""
                 )
         );
 
         fields.add(
                 new LabelField(
-                        "قیمت شماره ۲",
+                        "قیمت حجم بالا",
                         ""
                 )
         );
@@ -554,71 +365,40 @@ public class MainActivity extends Activity {
 
 
     private void rebuildManualRows() {
-
         manualRows.removeAllViews();
 
         nameEdits.clear();
         valueEdits.clear();
 
+        for (int i = 0; i < fields.size(); i++) {
 
-        for (
-                int i = 0;
-                i < fields.size();
-                i++
-        ) {
+            LabelField f = fields.get(i);
 
-            LabelField f =
-                    fields.get(i);
+            LinearLayout r = row();
 
-            LinearLayout r =
-                    row();
-
-
-            EditText n =
-                    new EditText(this);
-
+            EditText n = new EditText(this);
             n.setText(f.name);
+            n.setHint("نام قیمت");
 
-            n.setHint(
-                    "نام قیمت"
-            );
-
-
-            EditText v =
-                    new EditText(this);
-
+            EditText v = new EditText(this);
             v.setText(f.value);
-
-            v.setHint(
-                    "قیمت"
-            );
-
+            v.setHint("قیمت");
             v.setInputType(2);
 
-
-            Button del =
-                    btn("×");
-
+            Button del = btn("×");
 
             final int idx = i;
 
-
             del.setOnClickListener(x -> {
-
                 syncManualRows();
 
-                if (
-                        fields.size() > 1
-                ) {
-
+                if (fields.size() > 1) {
                     fields.remove(idx);
                 }
 
                 relayoutFields();
-
                 rebuildManualRows();
             });
-
 
             r.addView(
                     n,
@@ -646,7 +426,6 @@ public class MainActivity extends Activity {
                     )
             );
 
-
             manualRows.addView(r);
 
             nameEdits.add(n);
@@ -656,7 +435,6 @@ public class MainActivity extends Activity {
 
 
     private void syncManualRows() {
-
         for (
                 int i = 0;
                 i < Math.min(
@@ -673,7 +451,6 @@ public class MainActivity extends Activity {
                             .toString()
                             .trim();
 
-
             String raw =
                     valueEdits
                             .get(i)
@@ -681,7 +458,6 @@ public class MainActivity extends Activity {
                             .toString()
                             .replace(",", "")
                             .trim();
-
 
             fields.get(i).value =
                     formatPrice(
@@ -699,95 +475,94 @@ public class MainActivity extends Activity {
             String raw,
             boolean rial
     ) {
-
-        if (
-                raw == null
-                        || raw.isEmpty()
-        ) {
-
+        if (raw == null || raw.isEmpty()) {
             return "";
         }
 
-
         try {
+            String clean =
+                    raw.replace(",", "")
+                            .replace("٬", "")
+                            .trim();
 
             double d =
-                    Double.parseDouble(
-                            raw.replace(",", "")
-                    );
-
+                    Double.parseDouble(clean);
 
             if (rial) {
-
                 d /= 10.0;
             }
 
-
             long n =
                     Math.round(d);
-
 
             return new DecimalFormat(
                     "#,###"
             ).format(n);
 
         } catch (Exception e) {
-
             return raw;
         }
     }
 
 
     private void relayoutFields() {
-
         int n =
                 Math.max(
                         1,
                         fields.size()
                 );
 
+        float top = 0.07f;
+        float bottom = 0.93f;
 
-        for (
-                int i = 0;
-                i < fields.size();
-                i++
-        ) {
+        float available =
+                bottom - top;
+
+        float gap = 0.018f;
+
+        float h =
+                (available - gap * (n - 1))
+                        / n;
+
+        h = Math.min(
+                0.21f,
+                h
+        );
+
+        for (int i = 0; i < fields.size(); i++) {
 
             LabelField f =
                     fields.get(i);
 
-
-            f.x = .06f;
-
-            f.w = .88f;
-
-            f.h =
-                    Math.min(
-                            .18f,
-                            .78f / n
-                    );
+            f.x = 0.055f;
+            f.w = 0.89f;
+            f.h = h;
 
             f.y =
-                    .06f
-                            + i
-                            * (.88f / n);
+                    top + i * (h + gap);
+
+            if (i == 0) {
+                f.strike = true;
+            }
+
+            /*
+             * اندازه‌های جمع‌وجورتر برای جلوگیری از تداخل
+             */
+            f.titleSize = 0.22f;
+            f.priceSize = 0.34f;
         }
     }
 
 
     private void showDesigner() {
-
         if (
                 manualRows != null
                         && manualRows.getParent() != null
         ) {
-
             syncManualRows();
         }
 
-
         clear();
-
 
         body.addView(
                 tv(
@@ -797,7 +572,6 @@ public class MainActivity extends Activity {
                 )
         );
 
-
         body.addView(
                 tv(
                         "هر کادر قیمت را با انگشت بگیر و جابه‌جا کن.",
@@ -806,16 +580,11 @@ public class MainActivity extends Activity {
                 )
         );
 
-
         designer =
                 new LabelDesignerView(this);
 
         designer.setFields(fields);
-
-        designer.setProductBitmap(
-                currentBitmap
-        );
-
+        designer.setProductBitmap(currentBitmap);
 
         body.addView(
                 designer,
@@ -825,31 +594,21 @@ public class MainActivity extends Activity {
                 )
         );
 
-
         designer.setListener(
                 new LabelDesignerView.Listener() {
 
-                    public void onFieldSelected(
-                            int i
-                    ) {
-
+                    public void onFieldSelected(int i) {
                         selectedField = i;
-
                         showFieldEditor();
                     }
 
-
                     public void onChanged() {
-
                         saveTemplate();
                     }
                 }
         );
 
-
-        LinearLayout opts =
-                row();
-
+        LinearLayout opts = row();
 
         appendMode =
                 new CheckBox(this);
@@ -858,8 +617,9 @@ public class MainActivity extends Activity {
                 "کادر بیرون عکس"
         );
 
-        opts.addView(appendMode);
+        appendMode.setChecked(true);
 
+        opts.addView(appendMode);
 
         labelWidth =
                 new EditText(this);
@@ -868,28 +628,20 @@ public class MainActivity extends Activity {
                 "عرض %"
         );
 
-        labelWidth.setText(
-                "38"
-        );
+        labelWidth.setText("36");
 
         labelWidth.setInputType(2);
 
         opts.addView(labelWidth);
 
-
         body.addView(opts);
 
-
         Button add =
-                btn(
-                        "+ افزودن فیلد قیمت"
-                );
+                btn("+ افزودن فیلد قیمت");
 
         body.addView(add);
 
-
         add.setOnClickListener(v -> {
-
             fields.add(
                     new LabelField(
                             "قیمت جدید",
@@ -904,17 +656,12 @@ public class MainActivity extends Activity {
             saveTemplate();
         });
 
-
         Button save =
-                btn(
-                        "ذخیره قالب"
-                );
+                btn("ذخیره قالب");
 
         body.addView(save);
 
-
         save.setOnClickListener(v -> {
-
             saveTemplate();
 
             Toast.makeText(
@@ -924,14 +671,10 @@ public class MainActivity extends Activity {
             ).show();
         });
 
-
         Button sample =
-                btn(
-                        "انتخاب عکس نمونه"
-                );
+                btn("انتخاب عکس نمونه");
 
         body.addView(sample);
-
 
         sample.setOnClickListener(
                 v -> pickFile(
@@ -939,7 +682,6 @@ public class MainActivity extends Activity {
                         PICK_IMAGE
                 )
         );
-
 
         body.addView(
                 tv(
@@ -949,7 +691,6 @@ public class MainActivity extends Activity {
                 )
         );
 
-
         fieldEditorContainer =
                 new LinearLayout(this);
 
@@ -957,33 +698,23 @@ public class MainActivity extends Activity {
                 LinearLayout.VERTICAL
         );
 
-
-        body.addView(
-                fieldEditorContainer
-        );
+        body.addView(fieldEditorContainer);
     }
 
 
     private void showFieldEditor() {
-
         if (
                 fieldEditorContainer == null
                         || selectedField < 0
                         || selectedField >= fields.size()
         ) {
-
             return;
         }
 
-
         fieldEditorContainer.removeAllViews();
 
-
         LabelField f =
-                fields.get(
-                        selectedField
-                );
-
+                fields.get(selectedField);
 
         EditText name =
                 new EditText(this);
@@ -992,18 +723,13 @@ public class MainActivity extends Activity {
 
         fieldEditorContainer.addView(name);
 
-
         EditText val =
                 new EditText(this);
 
         val.setText(f.value);
-
-        val.setHint(
-                "قیمت / مقدار"
-        );
+        val.setHint("قیمت / مقدار");
 
         fieldEditorContainer.addView(val);
-
 
         CheckBox strike =
                 new CheckBox(this);
@@ -1020,7 +746,6 @@ public class MainActivity extends Activity {
                 strike
         );
 
-
         Button apply =
                 btn("اعمال");
 
@@ -1028,17 +753,14 @@ public class MainActivity extends Activity {
                 apply
         );
 
-
         apply.setOnClickListener(v -> {
 
             f.name =
-                    name
-                            .getText()
+                    name.getText()
                             .toString();
 
             f.value =
-                    val
-                            .getText()
+                    val.getText()
                             .toString();
 
             f.strike =
@@ -1049,22 +771,14 @@ public class MainActivity extends Activity {
             saveTemplate();
         });
 
-
         Button del =
-                btn(
-                        "حذف این فیلد"
-                );
+                btn("حذف این فیلد");
 
-        fieldEditorContainer.addView(
-                del
-        );
-
+        fieldEditorContainer.addView(del);
 
         del.setOnClickListener(v -> {
 
-            fields.remove(
-                    selectedField
-            );
+            fields.remove(selectedField);
 
             selectedField = -1;
 
@@ -1072,8 +786,7 @@ public class MainActivity extends Activity {
 
             designer.setFields(fields);
 
-            fieldEditorContainer
-                    .removeAllViews();
+            fieldEditorContainer.removeAllViews();
 
             saveTemplate();
         });
@@ -1081,18 +794,14 @@ public class MainActivity extends Activity {
 
 
     private void showOutput() {
-
         if (
                 manualRows != null
                         && manualRows.getParent() != null
         ) {
-
             syncManualRows();
         }
 
-
         clear();
-
 
         body.addView(
                 tv(
@@ -1102,7 +811,6 @@ public class MainActivity extends Activity {
                 )
         );
 
-
         Button preview =
                 btn(
                         "پیش‌نمایش خروجی نهایی"
@@ -1110,11 +818,9 @@ public class MainActivity extends Activity {
 
         body.addView(preview);
 
-
         preview.setOnClickListener(
                 v -> makePreview()
         );
-
 
         previewStatus =
                 tv(
@@ -1123,10 +829,7 @@ public class MainActivity extends Activity {
                         false
                 );
 
-        body.addView(
-                previewStatus
-        );
-
+        body.addView(previewStatus);
 
         Button save =
                 btn(
@@ -1135,11 +838,9 @@ public class MainActivity extends Activity {
 
         body.addView(save);
 
-
         save.setOnClickListener(
                 v -> saveCurrent()
         );
-
 
         Button batch =
                 btn(
@@ -1148,7 +849,6 @@ public class MainActivity extends Activity {
 
         body.addView(batch);
 
-
         batch.setOnClickListener(
                 v -> runBatch()
         );
@@ -1156,9 +856,7 @@ public class MainActivity extends Activity {
 
 
     private void makePreview() {
-
         if (currentBitmap == null) {
-
             Toast.makeText(
                     this,
                     "عکس انتخاب نشده",
@@ -1168,37 +866,28 @@ public class MainActivity extends Activity {
             return;
         }
 
-
         LabelDesignerView renderer =
                 new LabelDesignerView(this);
 
-
         renderer.setFields(fields);
 
-
         boolean append =
-                appendMode != null
-                        && appendMode.isChecked();
+                appendMode == null
+                        || appendMode.isChecked();
 
-
-        float width =
-                .38f;
-
+        float width = 0.36f;
 
         try {
-
             width =
                     Float.parseFloat(
                             labelWidth == null
-                                    ? "38"
+                                    ? "36"
                                     : labelWidth
                                     .getText()
                                     .toString()
                     ) / 100f;
-
         } catch (Exception ignored) {
         }
-
 
         Bitmap out =
                 renderer.renderFinal(
@@ -1209,14 +898,11 @@ public class MainActivity extends Activity {
                         width
                 );
 
-
         ImageView iv =
                 new ImageView(this);
 
         iv.setAdjustViewBounds(true);
-
         iv.setImageBitmap(out);
-
 
         body.addView(
                 iv,
@@ -1229,7 +915,6 @@ public class MainActivity extends Activity {
                 -2
         );
 
-
         previewStatus.setText(
                 "پیش‌نمایش ساخته شد."
         );
@@ -1240,37 +925,28 @@ public class MainActivity extends Activity {
             Bitmap src,
             ArrayList<LabelField> useFields
     ) {
-
         LabelDesignerView r =
                 new LabelDesignerView(this);
 
-
         r.setFields(useFields);
 
-
         boolean append =
-                appendMode != null
-                        && appendMode.isChecked();
+                appendMode == null
+                        || appendMode.isChecked();
 
-
-        float width =
-                .38f;
-
+        float width = 0.36f;
 
         try {
-
             width =
                     Float.parseFloat(
                             labelWidth == null
-                                    ? "38"
+                                    ? "36"
                                     : labelWidth
                                     .getText()
                                     .toString()
                     ) / 100f;
-
         } catch (Exception ignored) {
         }
-
 
         return r.renderFinal(
                 src,
@@ -1283,9 +959,7 @@ public class MainActivity extends Activity {
 
 
     private void saveCurrent() {
-
         if (currentBitmap == null) {
-
             Toast.makeText(
                     this,
                     "عکس انتخاب نشده",
@@ -1295,27 +969,22 @@ public class MainActivity extends Activity {
             return;
         }
 
-
         Bitmap out =
                 render(
                         currentBitmap,
                         fields
                 );
 
-
         String name =
                 "Javdan_"
                         + System.currentTimeMillis()
                         + ".jpg";
 
-
         try {
-
             saveToGallery(
                     out,
                     name
             );
-
 
             Toast.makeText(
                     this,
@@ -1342,24 +1011,20 @@ public class MainActivity extends Activity {
         ContentValues v =
                 new ContentValues();
 
-
         v.put(
                 MediaStore.Images.Media.DISPLAY_NAME,
                 name
         );
-
 
         v.put(
                 MediaStore.Images.Media.MIME_TYPE,
                 "image/jpeg"
         );
 
-
         v.put(
                 MediaStore.Images.Media.RELATIVE_PATH,
                 "Pictures/JavdanPriceLabeler"
         );
-
 
         Uri u =
                 getContentResolver()
@@ -1368,14 +1033,11 @@ public class MainActivity extends Activity {
                                 v
                         );
 
-
         if (u == null) {
-
             throw new IOException(
                     "ساخت فایل خروجی ناموفق بود"
             );
         }
-
 
         try (
                 OutputStream o =
@@ -1384,12 +1046,10 @@ public class MainActivity extends Activity {
         ) {
 
             if (o == null) {
-
                 throw new IOException(
                         "فایل خروجی باز نشد"
                 );
             }
-
 
             bmp.compress(
                     Bitmap.CompressFormat.JPEG,
@@ -1404,25 +1064,20 @@ public class MainActivity extends Activity {
             String type,
             int request
     ) {
-
         Intent i =
                 new Intent(
                         Intent.ACTION_OPEN_DOCUMENT
                 );
 
-
         i.addCategory(
                 Intent.CATEGORY_OPENABLE
         );
 
-
         i.setType(type);
-
 
         i.addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
         );
-
 
         startActivityForResult(
                 i,
@@ -1432,18 +1087,15 @@ public class MainActivity extends Activity {
 
 
     private void pickFolder() {
-
         Intent i =
                 new Intent(
                         Intent.ACTION_OPEN_DOCUMENT_TREE
                 );
 
-
         i.addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
                         | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
         );
-
 
         startActivityForResult(
                 i,
@@ -1458,51 +1110,40 @@ public class MainActivity extends Activity {
             int result,
             Intent data
     ) {
-
         super.onActivityResult(
                 req,
                 result,
                 data
         );
 
-
         if (
                 result != RESULT_OK
                         || data == null
         ) {
-
             return;
         }
-
 
         Uri u =
                 data.getData();
 
-
         if (u == null) {
-
             return;
         }
 
-
         try {
-
             getContentResolver()
                     .takePersistableUriPermission(
                             u,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION
                     );
-
         } catch (Exception ignored) {
         }
-
 
         try {
 
             if (req == PICK_IMAGE) {
 
                 imageUri = u;
-
 
                 try (
                         InputStream in =
@@ -1511,74 +1152,54 @@ public class MainActivity extends Activity {
                 ) {
 
                     currentBitmap =
-                            BitmapFactory
-                                    .decodeStream(in);
+                            BitmapFactory.decodeStream(in);
                 }
-
 
                 status.setText(
                         "عکس انتخاب شد"
                 );
 
-
                 if (designer != null) {
-
                     designer.setProductBitmap(
                             currentBitmap
                     );
                 }
 
-
-            } else if (
-                    req == PICK_EXCEL
-            ) {
+            } else if (req == PICK_EXCEL) {
 
                 excelUri = u;
-
 
                 status.setText(
                         "در حال خواندن Excel..."
                 );
 
-
                 excelRows =
                         new XlsxReader(this)
                                 .readFirstSheet(u);
 
-
                 headers.clear();
 
-
                 if (!excelRows.isEmpty()) {
-
                     headers.addAll(
-                            excelRows
-                                    .get(0)
+                            excelRows.get(0)
                                     .keySet()
                     );
                 }
 
-
                 refreshExcelUi();
-
 
                 status.setText(
                         excelRows.size()
                                 + " ردیف Excel خوانده شد"
                 );
 
-
-            } else if (
-                    req == PICK_FOLDER
-            ) {
+            } else if (req == PICK_FOLDER) {
 
                 folderUri = u;
-
 
                 status.setText(
                         "پوشه تصاویر انتخاب شد"
                 );
-
 
                 Toast.makeText(
                         this,
@@ -1600,10 +1221,7 @@ public class MainActivity extends Activity {
 
 
     private void refreshExcelUi() {
-
-        if (
-                codeSpinner != null
-        ) {
+        if (codeSpinner != null) {
 
             ArrayAdapter<String> a =
                     new ArrayAdapter<>(
@@ -1612,17 +1230,12 @@ public class MainActivity extends Activity {
                             headers
                     );
 
-
             codeSpinner.setAdapter(a);
         }
 
-
-        if (
-                excelInfo != null
-        ) {
+        if (excelInfo != null) {
 
             excelInfo.removeAllViews();
-
 
             excelInfo.addView(
                     tv(
@@ -1638,17 +1251,12 @@ public class MainActivity extends Activity {
     }
 
 
-    /*
-     * بررسی واقعی تطبیق Excel و تصاویر
-     */
     private void validateBatch() {
-
         if (
                 excelUri == null
                         || folderUri == null
                         || excelRows.isEmpty()
         ) {
-
             Toast.makeText(
                     this,
                     "Excel و پوشه عکس‌ها را انتخاب کن",
@@ -1658,11 +1266,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-
-        if (
-                headers.isEmpty()
-        ) {
-
+        if (headers.isEmpty()) {
             Toast.makeText(
                     this,
                     "ستون‌های Excel شناسایی نشده‌اند",
@@ -1672,19 +1276,15 @@ public class MainActivity extends Activity {
             return;
         }
 
-
         final int selectedPos =
                 codeSpinner != null
-                        ? codeSpinner
-                        .getSelectedItemPosition()
+                        ? codeSpinner.getSelectedItemPosition()
                         : 0;
-
 
         if (
                 selectedPos < 0
                         || selectedPos >= headers.size()
         ) {
-
             Toast.makeText(
                     this,
                     "ستون کد محصول را انتخاب کن",
@@ -1694,42 +1294,29 @@ public class MainActivity extends Activity {
             return;
         }
 
-
         final String codeHeader =
-                headers.get(
-                        selectedPos
-                );
-
+                headers.get(selectedPos);
 
         status.setText(
                 "در حال بررسی تطبیق Excel و تصاویر..."
         );
-
 
         new Thread(() -> {
 
             try {
 
                 HashMap<String, Uri> images =
-                        listTreeImages(
-                                folderUri
-                        );
-
+                        listTreeImages(folderUri);
 
                 int excelCodeCount = 0;
-
                 int matched = 0;
-
                 int missingImages = 0;
-
 
                 ArrayList<String> missingCodes =
                         new ArrayList<>();
 
-
                 HashSet<String> excelCodes =
                         new HashSet<>();
-
 
                 for (
                         LinkedHashMap<String, String> row
@@ -1738,82 +1325,47 @@ public class MainActivity extends Activity {
 
                     String code =
                             normalizeCode(
-                                    row.get(
-                                            codeHeader
-                                    )
+                                    row.get(codeHeader)
                             );
 
-
-                    if (
-                            code.isEmpty()
-                    ) {
-
+                    if (code.isEmpty()) {
                         continue;
                     }
 
-
                     excelCodeCount++;
-
                     excelCodes.add(code);
 
-
-                    if (
-                            images.containsKey(
-                                    code
-                            )
-                    ) {
-
+                    if (images.containsKey(code)) {
                         matched++;
-
                     } else {
-
                         missingImages++;
 
-
-                        if (
-                                missingCodes.size() < 20
-                        ) {
-
-                            missingCodes.add(
-                                    code
-                            );
+                        if (missingCodes.size() < 20) {
+                            missingCodes.add(code);
                         }
                     }
                 }
 
-
                 int extraImages = 0;
-
 
                 ArrayList<String> extraImageCodes =
                         new ArrayList<>();
 
+                for (String imageCode : images.keySet()) {
 
-                for (
-                        String imageCode
-                                : images.keySet()
-                ) {
-
-                    if (
-                            !excelCodes.contains(
-                                    imageCode
-                            )
-                    ) {
+                    if (!excelCodes.contains(imageCode)) {
 
                         extraImages++;
-
 
                         if (
                                 extraImageCodes.size() < 20
                         ) {
-
                             extraImageCodes.add(
                                     imageCode
                             );
                         }
                     }
                 }
-
 
                 final int fExcelCodeCount =
                         excelCodeCount;
@@ -1830,7 +1382,6 @@ public class MainActivity extends Activity {
                 final int totalImages =
                         images.size();
 
-
                 final String missingText =
                         missingCodes.isEmpty()
                                 ? "-"
@@ -1838,7 +1389,6 @@ public class MainActivity extends Activity {
                                         "، ",
                                         missingCodes
                                 );
-
 
                 final String extraText =
                         extraImageCodes.isEmpty()
@@ -1848,24 +1398,18 @@ public class MainActivity extends Activity {
                                         extraImageCodes
                                 );
 
-
                 runOnUiThread(() -> {
 
                     status.setText(
-                            "تطبیق انجام شد — "
-                                    + "موفق: "
+                            "تطبیق انجام شد — موفق: "
                                     + fMatched
                                     + " | بدون عکس: "
                                     + fMissingImages
                     );
 
-
-                    if (
-                            excelInfo != null
-                    ) {
+                    if (excelInfo != null) {
 
                         excelInfo.removeAllViews();
-
 
                         excelInfo.addView(
                                 tv(
@@ -1878,7 +1422,6 @@ public class MainActivity extends Activity {
                                 )
                         );
 
-
                         excelInfo.addView(
                                 tv(
                                         "کدهای محصول: "
@@ -1887,7 +1430,6 @@ public class MainActivity extends Activity {
                                         true
                                 )
                         );
-
 
                         excelInfo.addView(
                                 tv(
@@ -1898,7 +1440,6 @@ public class MainActivity extends Activity {
                                 )
                         );
 
-
                         TextView okView =
                                 tv(
                                         "✓ تطبیق موفق: "
@@ -1907,16 +1448,13 @@ public class MainActivity extends Activity {
                                         true
                                 );
 
-
                         okView.setTextColor(
                                 0xFF168A3B
                         );
 
-
                         excelInfo.addView(
                                 okView
                         );
-
 
                         TextView missingView =
                                 tv(
@@ -1926,20 +1464,15 @@ public class MainActivity extends Activity {
                                         true
                                 );
 
-
                         missingView.setTextColor(
                                 0xFFC62828
                         );
-
 
                         excelInfo.addView(
                                 missingView
                         );
 
-
-                        if (
-                                fMissingImages > 0
-                        ) {
+                        if (fMissingImages > 0) {
 
                             excelInfo.addView(
                                     tv(
@@ -1951,7 +1484,6 @@ public class MainActivity extends Activity {
                             );
                         }
 
-
                         TextView extraView =
                                 tv(
                                         "عکس‌های بدون کد در Excel: "
@@ -1960,20 +1492,15 @@ public class MainActivity extends Activity {
                                         true
                                 );
 
-
                         extraView.setTextColor(
                                 0xFFE28A00
                         );
-
 
                         excelInfo.addView(
                                 extraView
                         );
 
-
-                        if (
-                                fExtraImages > 0
-                        ) {
+                        if (fExtraImages > 0) {
 
                             excelInfo.addView(
                                     tv(
@@ -1985,21 +1512,16 @@ public class MainActivity extends Activity {
                             );
                         }
 
-
-                        if (
-                                fMatched > 0
-                        ) {
+                        if (fMatched > 0) {
 
                             Button goOutput =
                                     btn(
                                             "ادامه و ساخت خروجی گروهی"
                                     );
 
-
                             excelInfo.addView(
                                     goOutput
                             );
-
 
                             goOutput.setOnClickListener(
                                     v -> showOutput()
@@ -2007,11 +1529,9 @@ public class MainActivity extends Activity {
                         }
                     }
 
-
                     Toast.makeText(
                             this,
-                            "بررسی تمام شد — "
-                                    + "تطبیق: "
+                            "بررسی تمام شد — تطبیق: "
                                     + fMatched
                                     + " | بدون عکس: "
                                     + fMissingImages
@@ -2021,7 +1541,6 @@ public class MainActivity extends Activity {
                     ).show();
                 });
 
-
             } catch (Exception e) {
 
                 runOnUiThread(() -> {
@@ -2029,7 +1548,6 @@ public class MainActivity extends Activity {
                     status.setText(
                             "خطا در بررسی تطبیق"
                     );
-
 
                     Toast.makeText(
                             this,
@@ -2045,15 +1563,31 @@ public class MainActivity extends Activity {
 
 
     /*
-     * ساخت گروهی خروجی‌ها
+     * فقط ستون‌هایی که عنوانشان شامل «قیمت» است
+     * وارد لیبل می‌شوند.
      */
-    private void runBatch() {
+    private boolean isPriceColumn(
+            String header
+    ) {
+        if (header == null) {
+            return false;
+        }
 
+        String h =
+                header.trim()
+                        .replace("ي", "ی")
+                        .replace("ك", "ک")
+                        .toLowerCase(Locale.ROOT);
+
+        return h.contains("قیمت");
+    }
+
+
+    private void runBatch() {
         if (
                 excelRows.isEmpty()
                         || folderUri == null
         ) {
-
             Toast.makeText(
                     this,
                     "Excel و پوشه عکس‌ها را انتخاب کن",
@@ -2063,11 +1597,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-
-        if (
-                headers.isEmpty()
-        ) {
-
+        if (headers.isEmpty()) {
             Toast.makeText(
                     this,
                     "ستون‌های Excel پیدا نشد",
@@ -2077,57 +1607,65 @@ public class MainActivity extends Activity {
             return;
         }
 
-
         Toast.makeText(
                 this,
                 "ساخت خروجی گروهی شروع شد...",
                 Toast.LENGTH_SHORT
         ).show();
 
-
         status.setText(
                 "در حال ساخت خروجی گروهی..."
         );
 
+        final boolean convert =
+                rialToToman == null
+                        || rialToToman.isChecked();
 
         new Thread(() -> {
 
             int ok = 0;
-
             int missing = 0;
-
             int errors = 0;
-
 
             try {
 
                 int selectedPos =
                         codeSpinner != null
-                                ? codeSpinner
-                                .getSelectedItemPosition()
+                                ? codeSpinner.getSelectedItemPosition()
                                 : 0;
-
 
                 if (
                         selectedPos < 0
                                 || selectedPos >= headers.size()
                 ) {
-
                     selectedPos = 0;
                 }
 
-
                 String codeHeader =
-                        headers.get(
-                                selectedPos
-                        );
+                        headers.get(selectedPos);
 
+                ArrayList<String> priceHeaders =
+                        new ArrayList<>();
+
+                for (String h : headers) {
+
+                    if (
+                            !h.equals(codeHeader)
+                                    && isPriceColumn(h)
+                    ) {
+                        priceHeaders.add(h);
+                    }
+                }
+
+                if (priceHeaders.isEmpty()) {
+
+                    throw new IOException(
+                            "هیچ ستون قیمتی در Excel پیدا نشد."
+                    );
+                }
 
                 HashMap<String, Uri> images =
-                        listTreeImages(
-                                folderUri
-                        );
-
+                        listTreeImages(folderUri);
 
                 for (
                         LinkedHashMap<String, String> row
@@ -2136,129 +1674,76 @@ public class MainActivity extends Activity {
 
                     String code =
                             normalizeCode(
-                                    row.get(
-                                            codeHeader
-                                    )
+                                    row.get(codeHeader)
                             );
 
-
-                    if (
-                            code.isEmpty()
-                    ) {
-
+                    if (code.isEmpty()) {
                         continue;
                     }
-
 
                     Uri img =
-                            images.get(
-                                    code
-                            );
+                            images.get(code);
 
-
-                    if (
-                            img == null
-                    ) {
-
+                    if (img == null) {
                         missing++;
-
                         continue;
                     }
-
 
                     try {
 
                         Bitmap src;
-
 
                         try (
                                 InputStream in =
                                         getContentResolver()
                                                 .openInputStream(img)
                         ) {
-
                             src =
-                                    BitmapFactory
-                                            .decodeStream(in);
+                                    BitmapFactory.decodeStream(in);
                         }
 
-
-                        if (
-                                src == null
-                        ) {
-
+                        if (src == null) {
                             errors++;
-
                             continue;
                         }
-
 
                         ArrayList<LabelField> fs =
                                 new ArrayList<>();
 
-
-                        int index = 0;
-
-
                         for (
-                                String h : headers
+                                int i = 0;
+                                i < priceHeaders.size();
+                                i++
                         ) {
 
-                            if (
-                                    h.equals(
-                                            codeHeader
-                                    )
-                            ) {
-
-                                continue;
-                            }
-
+                            String h =
+                                    priceHeaders.get(i);
 
                             String raw =
                                     row.get(h);
 
-
                             if (
                                     raw == null
-                                            || raw.trim()
-                                            .isEmpty()
+                                            || raw.trim().isEmpty()
                             ) {
-
                                 continue;
                             }
 
-
                             LabelField f =
                                     new LabelField(
-                                            h,
+                                            h.trim(),
                                             formatPrice(
                                                     raw,
-                                                    rialToToman == null
-                                                            || rialToToman.isChecked()
+                                                    convert
                                             )
                                     );
 
-
                             if (
-                                    index < fields.size()
+                                    i < fields.size()
                             ) {
 
                                 LabelField t =
-                                        fields.get(
-                                                index
-                                        );
-
-
-                                f.x = t.x;
-
-                                f.y = t.y;
-
-                                f.w = t.w;
-
-                                f.h = t.h;
-
-                                f.strike =
-                                        t.strike;
+                                        fields.get(i);
 
                                 f.titleColor =
                                         t.titleColor;
@@ -2273,28 +1758,28 @@ public class MainActivity extends Activity {
                                         t.priceSize;
                             }
 
+                            f.strike =
+                                    i == 0;
 
                             fs.add(f);
-
-                            index++;
                         }
 
+                        /*
+                         * مهم:
+                         * برای تعداد واقعی قیمت‌های همین محصول
+                         * چیدمان مرتب دوباره ساخته می‌شود.
+                         */
+                        layoutBatchFields(fs);
 
                         Bitmap out =
-                                render(
-                                        src,
-                                        fs
-                                );
-
+                                render(src, fs);
 
                         saveToGallery(
                                 out,
                                 code + ".jpg"
                         );
 
-
                         ok++;
-
 
                         src.recycle();
 
@@ -2302,30 +1787,21 @@ public class MainActivity extends Activity {
                                 out != src
                                         && !out.isRecycled()
                         ) {
-
                             out.recycle();
                         }
 
-
                     } catch (Exception e) {
-
                         errors++;
                     }
                 }
 
-
             } catch (Exception e) {
-
                 errors++;
             }
 
-
             int fok = ok;
-
             int fm = missing;
-
             int fe = errors;
-
 
             runOnUiThread(() -> {
 
@@ -2337,7 +1813,6 @@ public class MainActivity extends Activity {
                                 + " | خطا: "
                                 + fe
                 );
-
 
                 Toast.makeText(
                         this,
@@ -2356,8 +1831,71 @@ public class MainActivity extends Activity {
 
 
     /*
-     * خواندن تصاویر مستقیم داخل پوشه انتخاب‌شده
+     * چیدمان مرتب برای خروجی گروهی
      */
+    private void layoutBatchFields(
+            ArrayList<LabelField> fs
+    ) {
+        int n =
+                Math.max(
+                        1,
+                        fs.size()
+                );
+
+        float top = 0.08f;
+        float bottom = 0.92f;
+
+        float available =
+                bottom - top;
+
+        float gap = 0.020f;
+
+        float h =
+                (available - gap * (n - 1))
+                        / n;
+
+        h = Math.min(
+                0.20f,
+                h
+        );
+
+        for (
+                int i = 0;
+                i < fs.size();
+                i++
+        ) {
+
+            LabelField f =
+                    fs.get(i);
+
+            f.x = 0.055f;
+            f.w = 0.89f;
+
+            f.h = h;
+
+            f.y =
+                    top + i * (h + gap);
+
+            f.strike =
+                    i == 0;
+
+            /*
+             * اندازه متن برای هر ردیف
+             */
+            if (n <= 4) {
+                f.titleSize = 0.22f;
+                f.priceSize = 0.35f;
+            } else if (n <= 6) {
+                f.titleSize = 0.19f;
+                f.priceSize = 0.29f;
+            } else {
+                f.titleSize = 0.16f;
+                f.priceSize = 0.24f;
+            }
+        }
+    }
+
+
     private HashMap<String, Uri> listTreeImages(
             Uri tree
     ) throws Exception {
@@ -2365,13 +1903,9 @@ public class MainActivity extends Activity {
         HashMap<String, Uri> map =
                 new HashMap<>();
 
-
         String docId =
                 DocumentsContract
-                        .getTreeDocumentId(
-                                tree
-                        );
-
+                        .getTreeDocumentId(tree);
 
         Uri children =
                 DocumentsContract
@@ -2380,16 +1914,11 @@ public class MainActivity extends Activity {
                                 docId
                         );
 
-
         String[] cols = {
-
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-
                 DocumentsContract.Document.COLUMN_MIME_TYPE
         };
-
 
         try (
                 Cursor c =
@@ -2403,13 +1932,9 @@ public class MainActivity extends Activity {
                                 )
         ) {
 
-            if (
-                    c != null
-            ) {
+            if (c != null) {
 
-                while (
-                        c.moveToNext()
-                ) {
+                while (c.moveToNext()) {
 
                     String id =
                             c.getString(0);
@@ -2420,12 +1945,9 @@ public class MainActivity extends Activity {
                     String mime =
                             c.getString(2);
 
-
                     if (
                             mime != null
-                                    && mime.startsWith(
-                                            "image/"
-                                    )
+                                    && mime.startsWith("image/")
                     ) {
 
                         String stem =
@@ -2433,16 +1955,10 @@ public class MainActivity extends Activity {
                                         ? ""
                                         : name;
 
-
                         int dot =
-                                stem.lastIndexOf(
-                                        '.'
-                                );
+                                stem.lastIndexOf('.');
 
-
-                        if (
-                                dot > 0
-                        ) {
+                        if (dot > 0) {
 
                             stem =
                                     stem.substring(
@@ -2451,7 +1967,6 @@ public class MainActivity extends Activity {
                                     );
                         }
 
-
                         Uri child =
                                 DocumentsContract
                                         .buildDocumentUriUsingTree(
@@ -2459,11 +1974,8 @@ public class MainActivity extends Activity {
                                                 id
                                         );
 
-
                         map.put(
-                                normalizeCode(
-                                        stem
-                                ),
+                                normalizeCode(stem),
                                 child
                         );
                     }
@@ -2471,36 +1983,20 @@ public class MainActivity extends Activity {
             }
         }
 
-
         return map;
     }
 
 
-    /*
-     * یکسان‌سازی کد کالا
-     * مثال:
-     * 4380300.0 -> 4380300
-     */
     private String normalizeCode(
             String s
     ) {
-
-        if (
-                s == null
-        ) {
-
+        if (s == null) {
             return "";
         }
 
+        s = s.trim();
 
-        s =
-                s.trim();
-
-
-        if (
-                s.endsWith(".0")
-        ) {
-
+        if (s.endsWith(".0")) {
             s =
                     s.substring(
                             0,
@@ -2508,28 +2004,19 @@ public class MainActivity extends Activity {
                     );
         }
 
-
         return s;
     }
 
 
     private void saveTemplate() {
-
         try {
 
             JSONArray a =
                     new JSONArray();
 
-
-            for (
-                    LabelField f : fields
-            ) {
-
-                a.put(
-                        f.toJson()
-                );
+            for (LabelField f : fields) {
+                a.put(f.toJson());
             }
-
 
             getSharedPreferences(
                     "javdan",
@@ -2542,16 +2029,13 @@ public class MainActivity extends Activity {
                     )
                     .apply();
 
-
         } catch (Exception ignored) {
         }
     }
 
 
     private void loadTemplate() {
-
         fields.clear();
-
 
         String s =
                 getSharedPreferences(
@@ -2563,16 +2047,12 @@ public class MainActivity extends Activity {
                                 ""
                         );
 
-
-        if (
-                !s.isEmpty()
-        ) {
+        if (!s.isEmpty()) {
 
             try {
 
                 JSONArray a =
                         new JSONArray(s);
-
 
                 for (
                         int i = 0;
@@ -2587,16 +2067,11 @@ public class MainActivity extends Activity {
                     );
                 }
 
-
             } catch (Exception ignored) {
             }
         }
 
-
-        if (
-                fields.isEmpty()
-        ) {
-
+        if (fields.isEmpty()) {
             makeDefaults();
         }
     }
