@@ -31,46 +31,55 @@ public class LabelDesignerView extends View {
     public int canvasBackground = 0xFFF2F2F2;
     public float labelWidthPct = 0.38f;
 
-    // تنظیمات موقعیت محصول
+    // موقعیت و اندازه تصویر محصول در پیش‌نمایش و خروجی
     public float productX = 0.02f;
     public float productY = 0.05f;
     public float productW = 0.58f;
     public float productH = 0.90f;
+
 
     public LabelDesignerView(Context context) {
         super(context);
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
     }
 
+
     public void setListener(Listener listener) {
         this.listener = listener;
     }
 
+
     public void setFields(ArrayList<LabelField> fields) {
-        this.fields = fields == null
-                ? new ArrayList<>()
-                : fields;
+        this.fields =
+                fields == null
+                        ? new ArrayList<>()
+                        : fields;
 
         invalidate();
     }
 
+
     public ArrayList<LabelField> getFields() {
         return fields;
     }
+
 
     public void setProductBitmap(Bitmap bitmap) {
         this.productBitmap = bitmap;
         invalidate();
     }
 
+
     public void select(int index) {
         selected = index;
         invalidate();
     }
 
+
     public int getSelectedIndex() {
         return selected;
     }
+
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -87,7 +96,7 @@ public class LabelDesignerView extends View {
                 height
         );
 
-        // محدوده‌ای که کادرهای قیمت داخل آن قرار می‌گیرند
+        // محدوده طراحی کادرهای قیمت
         workingRect.set(
                 width * 0.61f,
                 height * 0.06f,
@@ -97,19 +106,20 @@ public class LabelDesignerView extends View {
 
         for (int i = 0; i < fields.size(); i++) {
 
-            LabelField field = fields.get(i);
+            LabelField field =
+                    fields.get(i);
 
             if (!field.visible) {
                 continue;
             }
 
-            RectF rect = fieldRect(field);
+            RectF rect =
+                    fieldRect(field);
 
             drawField(
                     canvas,
                     field,
-                    rect,
-                    true
+                    rect
             );
 
             if (i == selected) {
@@ -121,23 +131,31 @@ public class LabelDesignerView extends View {
         }
     }
 
+
     private void drawProductPreview(
             Canvas canvas,
             float width,
             float height
     ) {
 
-        RectF area = new RectF(
-                width * productX,
-                height * productY,
-                width * (productX + productW),
-                height * (productY + productH)
-        );
+        RectF area =
+                new RectF(
+                        width * productX,
+                        height * productY,
+                        width * (productX + productW),
+                        height * (productY + productH)
+                );
 
         if (productBitmap == null) {
 
-            Paint empty = new Paint(Paint.ANTI_ALIAS_FLAG);
-            empty.setColor(Color.WHITE);
+            Paint empty =
+                    new Paint(
+                            Paint.ANTI_ALIAS_FLAG
+                    );
+
+            empty.setColor(
+                    Color.WHITE
+            );
 
             canvas.drawRoundRect(
                     area,
@@ -156,35 +174,60 @@ public class LabelDesignerView extends View {
         );
     }
 
+
     private void drawBitmapFitCenter(
             Canvas canvas,
             Bitmap bitmap,
             RectF target
     ) {
 
-        float srcW = bitmap.getWidth();
-        float srcH = bitmap.getHeight();
+        if (
+                bitmap == null
+                        || bitmap.isRecycled()
+        ) {
+            return;
+        }
 
-        float scale = Math.min(
-                target.width() / srcW,
-                target.height() / srcH
-        );
+        float srcW =
+                bitmap.getWidth();
 
-        float dw = srcW * scale;
-        float dh = srcH * scale;
+        float srcH =
+                bitmap.getHeight();
+
+        if (
+                srcW <= 0
+                        || srcH <= 0
+        ) {
+            return;
+        }
+
+        float scale =
+                Math.min(
+                        target.width() / srcW,
+                        target.height() / srcH
+                );
+
+        float dw =
+                srcW * scale;
+
+        float dh =
+                srcH * scale;
 
         float left =
-                target.centerX() - dw / 2f;
+                target.centerX()
+                        - dw / 2f;
 
         float top =
-                target.centerY() - dh / 2f;
+                target.centerY()
+                        - dh / 2f;
 
-        RectF dst = new RectF(
-                left,
-                top,
-                left + dw,
-                top + dh
-        );
+        RectF dst =
+                new RectF(
+                        left,
+                        top,
+                        left + dw,
+                        top + dh
+                );
 
         Paint p =
                 new Paint(
@@ -200,6 +243,7 @@ public class LabelDesignerView extends View {
         );
     }
 
+
     private void drawSelection(
             Canvas canvas,
             RectF rect
@@ -214,7 +258,9 @@ public class LabelDesignerView extends View {
                 Paint.Style.STROKE
         );
 
-        selection.setStrokeWidth(4f);
+        selection.setStrokeWidth(
+                4f
+        );
 
         selection.setColor(
                 0xFF1976D2
@@ -227,7 +273,6 @@ public class LabelDesignerView extends View {
                 selection
         );
 
-        // دسته کوچک گوشه پایین راست برای نمایش بصری
         Paint handle =
                 new Paint(
                         Paint.ANTI_ALIAS_FLAG
@@ -245,11 +290,11 @@ public class LabelDesignerView extends View {
         );
     }
 
+
     private void drawField(
             Canvas canvas,
             LabelField field,
-            RectF rect,
-            boolean preview
+            RectF rect
     ) {
 
         if (!field.visible) {
@@ -262,7 +307,7 @@ public class LabelDesignerView extends View {
                         field.cornerRadius
                 );
 
-        // پس‌زمینه مستقل هر کادر
+        // پس‌زمینه مستقل
         Paint bg =
                 new Paint(
                         Paint.ANTI_ALIAS_FLAG
@@ -283,7 +328,8 @@ public class LabelDesignerView extends View {
                 bg
         );
 
-        // حاشیه مستقل هر کادر
+
+        // حاشیه مستقل
         if (field.borderWidth > 0) {
 
             Paint border =
@@ -310,6 +356,7 @@ public class LabelDesignerView extends View {
                     border
             );
         }
+
 
         float horizontalPadding =
                 Math.max(
@@ -345,6 +392,7 @@ public class LabelDesignerView extends View {
                         right - left
                 );
 
+
         Paint.Align align =
                 getPaintAlign(
                         field.textAlign
@@ -357,6 +405,8 @@ public class LabelDesignerView extends View {
                         right
                 );
 
+
+        // عنوان
         Paint titlePaint =
                 new Paint(
                         Paint.ANTI_ALIAS_FLAG
@@ -374,65 +424,38 @@ public class LabelDesignerView extends View {
                 align
         );
 
-        float titlePx =
+        titlePaint.setTextSize(
                 spToPx(
                         Math.max(
                                 8,
                                 field.titleSize
                         )
-                );
-
-        titlePaint.setTextSize(
-                titlePx
+                )
         );
+
+
+        String title =
+                safe(
+                        field.name
+                ).trim();
+
+        String priceValue =
+                safe(
+                        field.value
+                ).trim();
+
 
         fitTextSize(
                 titlePaint,
-                safe(field.name),
+                title,
                 usableW,
                 10f
         );
 
-        Paint pricePaint =
-                new Paint(
-                        Paint.ANTI_ALIAS_FLAG
-                );
-
-        pricePaint.setColor(
-                field.priceColor
-        );
-
-        pricePaint.setTypeface(
-                field.getPriceTypeface()
-        );
-
-        pricePaint.setTextAlign(
-                align
-        );
-
-        float pricePx =
-                spToPx(
-                        Math.max(
-                                10,
-                                field.priceSize
-                        )
-                );
-
-        pricePaint.setTextSize(
-                pricePx
-        );
-
-        String title =
-                safe(field.name)
-                        .trim();
-
-        String priceValue =
-                safe(field.value)
-                        .trim();
 
         float cursorY = top;
 
-        // عنوان
+
         if (
                 field.showTitle
                         && !title.isEmpty()
@@ -458,217 +481,267 @@ public class LabelDesignerView extends View {
                     );
         }
 
-        // قیمت
-        if (
-                field.showPrice
-                        && !priceValue.isEmpty()
-        ) {
 
-            Paint unitPaint =
-                    new Paint(
-                            Paint.ANTI_ALIAS_FLAG
+        if (
+                !field.showPrice
+                        || priceValue.isEmpty()
+        ) {
+            return;
+        }
+
+
+        // قیمت
+        Paint pricePaint =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
+
+        pricePaint.setColor(
+                field.priceColor
+        );
+
+        pricePaint.setTypeface(
+                field.getPriceTypeface()
+        );
+
+        pricePaint.setTextAlign(
+                align
+        );
+
+        pricePaint.setTextSize(
+                spToPx(
+                        Math.max(
+                                10,
+                                field.priceSize
+                        )
+                )
+        );
+
+
+        Paint unitPaint =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
+
+        unitPaint.setColor(
+                field.tomanColor
+        );
+
+        unitPaint.setTypeface(
+                field.getPriceTypeface()
+        );
+
+        unitPaint.setTextSize(
+                spToPx(
+                        Math.max(
+                                8,
+                                field.tomanSize
+                        )
+                )
+        );
+
+
+        String unit =
+                field.showToman
+                        ? "تومان"
+                        : "";
+
+
+        float gap =
+                field.showToman
+                        ? Math.max(
+                        4f,
+                        pricePaint.getTextSize()
+                                * 0.12f
+                )
+                        : 0f;
+
+
+        if (field.textAlign == 0) {
+
+            // راست‌چین
+            pricePaint.setTextAlign(
+                    Paint.Align.RIGHT
+            );
+
+            unitPaint.setTextAlign(
+                    Paint.Align.RIGHT
+            );
+
+            float unitW =
+                    unitPaint.measureText(
+                            unit
                     );
 
-            unitPaint.setColor(
-                    field.tomanColor
+            float maxNumberW =
+                    usableW
+                            - unitW
+                            - gap;
+
+            fitTextSize(
+                    pricePaint,
+                    priceValue,
+                    Math.max(
+                            30f,
+                            maxNumberW
+                    ),
+                    14f
             );
 
-            unitPaint.setTypeface(
-                    field.getPriceTypeface()
+            float priceBaseline =
+                    cursorY
+                            - pricePaint.ascent();
+
+
+            if (
+                    priceBaseline
+                            + pricePaint.descent()
+                            > bottom
+            ) {
+
+                priceBaseline =
+                        bottom
+                                - pricePaint.descent();
+            }
+
+
+            canvas.drawText(
+                    priceValue,
+                    right,
+                    priceBaseline,
+                    pricePaint
             );
 
-            unitPaint.setTextSize(
-                    spToPx(
-                            Math.max(
-                                    8,
-                                    field.tomanSize
-                            )
-                    )
-            );
 
-            String unit =
-                    field.showToman
-                            ? "تومان"
-                            : "";
+            float numberW =
+                    pricePaint.measureText(
+                            priceValue
+                    );
 
-            float gap =
-                    field.showToman
-                            ? Math.max(
-                            4f,
-                            pricePaint.getTextSize() * 0.14f
-                    )
-                            : 0f;
+            float unitRight =
+                    right
+                            - numberW
+                            - gap;
 
-            if (field.textAlign == 0) {
 
-                // راست‌چین
-                pricePaint.setTextAlign(
-                        Paint.Align.RIGHT
-                );
-
-                unitPaint.setTextAlign(
-                        Paint.Align.RIGHT
-                );
-
-                float unitW =
-                        unitPaint.measureText(
-                                unit
-                        );
-
-                float maxNumberW =
-                        usableW
-                                - unitW
-                                - gap;
-
-                fitTextSize(
-                        pricePaint,
-                        priceValue,
-                        Math.max(
-                                30f,
-                                maxNumberW
-                        ),
-                        14f
-                );
-
-                float priceBaseline =
-                        cursorY
-                                - pricePaint.ascent();
-
-                if (
-                        priceBaseline
-                                - pricePaint.ascent()
-                                > bottom
-                ) {
-                    priceBaseline =
-                            bottom
-                                    - pricePaint.descent();
-                }
+            if (field.showToman) {
 
                 canvas.drawText(
-                        priceValue,
+                        unit,
+                        unitRight,
+                        priceBaseline,
+                        unitPaint
+                );
+            }
+
+
+            if (field.strike) {
+
+                float strikeLeft =
+                        field.showToman
+                                ? unitRight
+                                - unitW
+                                : right
+                                - numberW;
+
+                drawStrike(
+                        canvas,
+                        field,
+                        strikeLeft,
                         right,
                         priceBaseline,
                         pricePaint
                 );
+            }
 
-                float numberW =
+        } else {
+
+            // وسط یا چپ
+            String fullText =
+                    field.showToman
+                            ? priceValue
+                            + "  "
+                            + unit
+                            : priceValue;
+
+
+            fitTextSize(
+                    pricePaint,
+                    fullText,
+                    usableW,
+                    14f
+            );
+
+
+            float priceBaseline =
+                    cursorY
+                            - pricePaint.ascent();
+
+
+            if (
+                    priceBaseline
+                            + pricePaint.descent()
+                            > bottom
+            ) {
+
+                priceBaseline =
+                        bottom
+                                - pricePaint.descent();
+            }
+
+
+            canvas.drawText(
+                    fullText,
+                    anchorX,
+                    priceBaseline,
+                    pricePaint
+            );
+
+
+            if (field.strike) {
+
+                float textW =
                         pricePaint.measureText(
-                                priceValue
+                                fullText
                         );
 
-                float unitRight =
-                        right
-                                - numberW
-                                - gap;
+                float strikeLeft;
+                float strikeRight;
 
-                if (field.showToman) {
-                    canvas.drawText(
-                            unit,
-                            unitRight,
-                            priceBaseline,
-                            unitPaint
-                    );
+
+                if (field.textAlign == 1) {
+
+                    strikeLeft =
+                            anchorX
+                                    - textW / 2f;
+
+                    strikeRight =
+                            anchorX
+                                    + textW / 2f;
+
+                } else {
+
+                    strikeLeft =
+                            anchorX;
+
+                    strikeRight =
+                            anchorX
+                                    + textW;
                 }
 
-                if (field.strike) {
 
-                    float strikeLeft =
-                            field.showToman
-                                    ? unitRight
-                                    - unitW
-                                    : right
-                                    - numberW;
-
-                    drawStrike(
-                            canvas,
-                            field,
-                            strikeLeft,
-                            right,
-                            priceBaseline,
-                            pricePaint
-                    );
-                }
-
-            } else {
-
-                // وسط یا چپ
-                String fullText =
-                        field.showToman
-                                ? priceValue
-                                + "  "
-                                + unit
-                                : priceValue;
-
-                fitTextSize(
-                        pricePaint,
-                        fullText,
-                        usableW,
-                        14f
-                );
-
-                float priceBaseline =
-                        cursorY
-                                - pricePaint.ascent();
-
-                if (
-                        priceBaseline
-                                - pricePaint.ascent()
-                                > bottom
-                ) {
-                    priceBaseline =
-                            bottom
-                                    - pricePaint.descent();
-                }
-
-                canvas.drawText(
-                        fullText,
-                        anchorX,
+                drawStrike(
+                        canvas,
+                        field,
+                        strikeLeft,
+                        strikeRight,
                         priceBaseline,
                         pricePaint
                 );
-
-                if (field.strike) {
-
-                    float textW =
-                            pricePaint.measureText(
-                                    fullText
-                            );
-
-                    float strikeLeft;
-                    float strikeRight;
-
-                    if (field.textAlign == 1) {
-
-                        strikeLeft =
-                                anchorX
-                                        - textW / 2f;
-
-                        strikeRight =
-                                anchorX
-                                        + textW / 2f;
-
-                    } else {
-
-                        strikeLeft =
-                                anchorX;
-
-                        strikeRight =
-                                anchorX
-                                        + textW;
-                    }
-
-                    drawStrike(
-                            canvas,
-                            field,
-                            strikeLeft,
-                            strikeRight,
-                            priceBaseline,
-                            pricePaint
-                    );
-                }
             }
         }
     }
+
 
     private void drawStrike(
             Canvas canvas,
@@ -710,6 +783,7 @@ public class LabelDesignerView extends View {
         );
     }
 
+
     private Paint.Align getPaintAlign(
             int align
     ) {
@@ -724,6 +798,7 @@ public class LabelDesignerView extends View {
 
         return Paint.Align.RIGHT;
     }
+
 
     private float getAnchorX(
             int align,
@@ -741,6 +816,7 @@ public class LabelDesignerView extends View {
 
         return right;
     }
+
 
     private RectF fieldRect(
             LabelField field
@@ -776,6 +852,7 @@ public class LabelDesignerView extends View {
         );
     }
 
+
     @Override
     public boolean onTouchEvent(
             MotionEvent event
@@ -787,6 +864,7 @@ public class LabelDesignerView extends View {
         ) {
 
             selected = -1;
+
 
             for (
                     int i = fields.size() - 1;
@@ -814,11 +892,13 @@ public class LabelDesignerView extends View {
                 }
             }
 
+
             downX =
                     event.getX();
 
             downY =
                     event.getY();
+
 
             if (
                     listener != null
@@ -830,9 +910,12 @@ public class LabelDesignerView extends View {
                 );
             }
 
+
             invalidate();
+
             return true;
         }
+
 
         if (
                 event.getAction()
@@ -843,12 +926,14 @@ public class LabelDesignerView extends View {
             LabelField field =
                     fields.get(selected);
 
+
             float dx =
                     (
                             event.getX()
                                     - downX
                     )
                             / workingRect.width();
+
 
             float dy =
                     (
@@ -857,23 +942,28 @@ public class LabelDesignerView extends View {
                     )
                             / workingRect.height();
 
+
             field.x =
                     Math.max(
                             0f,
                             Math.min(
-                                    1f - field.w,
+                                    1f
+                                            - field.w,
                                     field.x + dx
                             )
                     );
+
 
             field.y =
                     Math.max(
                             0f,
                             Math.min(
-                                    1f - field.h,
+                                    1f
+                                            - field.h,
                                     field.y + dy
                             )
                     );
+
 
             downX =
                     event.getX();
@@ -881,9 +971,12 @@ public class LabelDesignerView extends View {
             downY =
                     event.getY();
 
+
             invalidate();
+
             return true;
         }
+
 
         if (
                 event.getAction()
@@ -897,8 +990,10 @@ public class LabelDesignerView extends View {
             return true;
         }
 
+
         return true;
     }
+
 
     public Bitmap renderFinal(
             Bitmap source,
@@ -914,6 +1009,7 @@ public class LabelDesignerView extends View {
         int sh =
                 source.getHeight();
 
+
         float safeWidthPercent =
                 Math.max(
                         0.24f,
@@ -922,6 +1018,7 @@ public class LabelDesignerView extends View {
                                 0.55f
                         )
                 );
+
 
         int labelAreaW =
                 Math.max(
@@ -932,60 +1029,113 @@ public class LabelDesignerView extends View {
                         )
                 );
 
+
         int gap =
                 Math.max(
                         10,
                         sw / 80
                 );
 
+
         Bitmap output;
 
+        RectF productArea;
         RectF labelArea;
+
 
         if (append) {
 
+            int outW =
+                    sw
+                            + labelAreaW
+                            + gap;
+
+
             output =
                     Bitmap.createBitmap(
-                            sw + labelAreaW + gap,
+                            outW,
                             sh,
                             Bitmap.Config.ARGB_8888
                     );
 
-            Canvas c =
+
+            Canvas canvas =
                     new Canvas(output);
 
-            c.drawColor(
+
+            canvas.drawColor(
                     backgroundColor
             );
 
-            c.drawBitmap(
+
+            // تصویر محصول با موقعیت و اندازه قابل تنظیم
+            productArea =
+                    new RectF(
+                            productX * sw,
+                            productY * sh,
+                            (productX + productW) * sw,
+                            (productY + productH) * sh
+                    );
+
+
+            drawBitmapFitCenter(
+                    canvas,
                     source,
-                    0,
-                    0,
-                    null
+                    productArea
             );
 
+
+            // محدوده کادرهای قیمت
             labelArea =
                     new RectF(
                             sw + gap,
                             0,
-                            sw + gap + labelAreaW,
+                            outW,
                             sh
                     );
+
 
         } else {
 
             output =
-                    source.copy(
-                            Bitmap.Config.ARGB_8888,
-                            true
+                    Bitmap.createBitmap(
+                            sw,
+                            sh,
+                            Bitmap.Config.ARGB_8888
                     );
+
+
+            Canvas canvas =
+                    new Canvas(output);
+
+
+            canvas.drawColor(
+                    backgroundColor
+            );
+
+
+            productArea =
+                    new RectF(
+                            productX * sw,
+                            productY * sh,
+                            (productX + productW) * sw,
+                            (productY + productH) * sh
+                    );
+
+
+            drawBitmapFitCenter(
+                    canvas,
+                    source,
+                    productArea
+            );
+
 
             int margin =
                     Math.max(
                             10,
                             sw / 80
                     );
+
 
             labelArea =
                     new RectF(
@@ -1000,12 +1150,12 @@ public class LabelDesignerView extends View {
                     );
         }
 
+
         Canvas canvas =
                 new Canvas(output);
 
-        // هیچ نوار سفید سراسری رسم نمی‌کنیم.
-        // فقط خود کادرهای مستقل رسم می‌شوند.
 
+        // فقط کادرهای مستقل رسم می‌شوند
         for (
                 LabelField field
                         : fields
@@ -1014,6 +1164,7 @@ public class LabelDesignerView extends View {
             if (!field.visible) {
                 continue;
             }
+
 
             RectF rect =
                     new RectF(
@@ -1040,16 +1191,18 @@ public class LabelDesignerView extends View {
                                     * labelArea.height()
                     );
 
+
             drawField(
                     canvas,
                     field,
-                    rect,
-                    false
+                    rect
             );
         }
 
+
         return output;
     }
+
 
     private void fitTextSize(
             Paint paint,
@@ -1065,8 +1218,10 @@ public class LabelDesignerView extends View {
             return;
         }
 
+
         float size =
                 paint.getTextSize();
+
 
         while (
                 paint.measureText(text)
@@ -1082,13 +1237,16 @@ public class LabelDesignerView extends View {
         }
     }
 
+
     private String safe(
             String s
     ) {
+
         return s == null
                 ? ""
                 : s;
     }
+
 
     private float spToPx(
             float sp
@@ -1099,4 +1257,4 @@ public class LabelDesignerView extends View {
                 .getDisplayMetrics()
                 .scaledDensity;
     }
-                                }
+}
