@@ -7,8 +7,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
-
-import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
@@ -267,14 +265,14 @@ public class XlsxReader {
 
         trySetAttribute(
                 f,
-                XMLConstants.ACCESS_EXTERNAL_DTD,
-                ""
+                "http://javax.xml.XMLConstants/property/accessExternalDTD",
+                
         );
 
         trySetAttribute(
                 f,
-                XMLConstants.ACCESS_EXTERNAL_SCHEMA,
-                ""
+                "http://javax.xml.XMLConstants/property/accessExternalSchema",
+                
         );
 
         DocumentBuilder b = f.newDocumentBuilder();
