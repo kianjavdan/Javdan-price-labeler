@@ -8,7 +8,6 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
-import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
@@ -170,7 +169,6 @@ public class XlsxReader {
             return out;
 
         } finally {
-            //noinspection ResultOfMethodCallIgnored
             temp.delete();
         }
     }
@@ -210,17 +208,6 @@ public class XlsxReader {
         return out;
     }
 
-    /*
-     * Android's XML parser does not support every Apache/Xerces feature URI.
-     * Previously, setFeature(disallow-doctype-decl) threw immediately.
-     *
-     * We now:
-     * 1) Reject any XML containing a DOCTYPE before parsing.
-     * 2) Apply hardening flags only when the current Android parser supports them.
-     * 3) Block all external entity resolution with an EntityResolver.
-     *
-     * This keeps XLSX parsing compatible with Android without allowing external XML resources.
-     */
     private Document parse(InputStream in) throws Exception {
 
         byte[] xml = readAll(in);
@@ -233,10 +220,13 @@ public class XlsxReader {
         ).toUpperCase();
 
         if (probe.contains("<!DOCTYPE")) {
-            throw new IOException("فایل Excel شامل XML غیرمجاز (DOCTYPE) است.");
+            throw new IOException(
+                    "فایل Excel شامل XML غیرمجاز (DOCTYPE) است."
+            );
         }
 
-        DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory f =
+                DocumentBuilderFactory.newInstance();
 
         f.setNamespaceAware(false);
         f.setExpandEntityReferences(false);
@@ -267,23 +257,30 @@ public class XlsxReader {
 
         trySetAttribute(
                 f,
-                XMLConstants.ACCESS_EXTERNAL_DTD,
+                "http://javax.xml.XMLConstants/property/accessExternalDTD",
                 ""
         );
 
         trySetAttribute(
                 f,
-                XMLConstants.ACCESS_EXTERNAL_SCHEMA,
+                "http://javax.xml.XMLConstants/property/accessExternalSchema",
                 ""
         );
 
         DocumentBuilder b = f.newDocumentBuilder();
 
-        b.setEntityResolver((publicId, systemId) ->
-                new InputSource(new ByteArrayInputStream(new byte[0]))
+        b.setEntityResolver(
+                (publicId, systemId) ->
+                        new InputSource(
+                                new ByteArrayInputStream(
+                                        new byte[0]
+                                )
+                        )
         );
 
-        return b.parse(new ByteArrayInputStream(xml));
+        return b.parse(
+                new ByteArrayInputStream(xml)
+        );
     }
 
     private void trySetFeature(
@@ -291,10 +288,10 @@ public class XlsxReader {
             String name,
             boolean value
     ) {
+
         try {
             f.setFeature(name, value);
         } catch (Throwable ignored) {
-            // Some Android XML implementations do not support this feature.
         }
     }
 
@@ -303,16 +300,18 @@ public class XlsxReader {
             String name,
             String value
     ) {
+
         try {
             f.setAttribute(name, value);
         } catch (Throwable ignored) {
-            // Not supported on every Android API/parser implementation.
         }
     }
 
-    private byte[] readAll(InputStream in) throws IOException {
+    private byte[] readAll(InputStream in)
+            throws IOException {
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream out =
+                new ByteArrayOutputStream();
 
         byte[] buf = new byte[8192];
         int n;
@@ -333,12 +332,19 @@ public class XlsxReader {
             char ch = ref.charAt(i);
 
             if (ch >= 'A' && ch <= 'Z') {
-                n = n * 26 + (ch - 'A' + 1);
+
+                n =
+                        n * 26
+                        + (ch - 'A' + 1);
+
             } else {
                 break;
             }
         }
 
-        return Math.max(0, n - 1);
+        return Math.max(
+                0,
+                n - 1
+        );
     }
 }
