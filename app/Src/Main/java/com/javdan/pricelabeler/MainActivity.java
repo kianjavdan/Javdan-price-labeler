@@ -1,5 +1,7 @@
 package com.javdan.pricelabeler;
-
+import android.graphics.drawable.GradientDrawable;
+import android.widget.GridLayout;
+import android.view.Window;
 import android.app.*;
 import android.os.*;
 import android.content.*;
@@ -1096,5 +1098,147 @@ public class MainActivity extends Activity {
         if(e==null)return "خطای نامشخص";
         String m=e.getMessage();
         return (m==null||m.trim().isEmpty())?e.getClass().getSimpleName():m;
+    } 
+}private void showColorPalette(String title, int currentColor, final ColorSelectedListener listener) {
+
+    final Dialog dialog = new Dialog(this);
+
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setPadding(30, 25, 30, 25);
+
+    TextView titleView = new TextView(this);
+    titleView.setText(title);
+    titleView.setTextSize(20);
+    titleView.setTypeface(Typeface.DEFAULT_BOLD);
+    titleView.setGravity(Gravity.CENTER);
+    titleView.setPadding(10, 10, 10, 25);
+
+    root.addView(titleView);
+
+    final int[] colors = {
+
+            0xFFFFFFFF, // سفید
+            0xFFF5F5F5, // خاکستری خیلی روشن
+            0xFFE0E0E0,
+            0xFF9E9E9E,
+            0xFF616161,
+            0xFF212121, // مشکی
+
+            0xFFFFCDD2, // قرمز روشن
+            0xFFEF5350,
+            0xFFC62828,
+            0xFF8E0000,
+
+            0xFFFFE0B2, // نارنجی روشن
+            0xFFFF9800,
+            0xFFEF6C00,
+
+            0xFFFFF9C4, // زرد روشن
+            0xFFFFEB3B,
+            0xFFF9A825,
+
+            0xFFC8E6C9, // سبز روشن
+            0xFF66BB6A,
+            0xFF2E7D32,
+            0xFF1B5E20,
+
+            0xFFB2DFDB, // فیروزه‌ای
+            0xFF26A69A,
+            0xFF00796B,
+
+            0xFFBBDEFB, // آبی روشن
+            0xFF42A5F5,
+            0xFF1976D2,
+            0xFF0D47A1,
+
+            0xFFD1C4E9, // بنفش روشن
+            0xFF7E57C2,
+            0xFF512DA8,
+
+            0xFFF8BBD0, // صورتی
+            0xFFEC407A,
+            0xFFC2185B,
+
+            0xFFFFF3E0, // مناسب پس‌زمینه
+            0xFFE3F2FD,
+            0xFFE8F5E9,
+            0xFFF3E5F5
+    };
+
+    GridLayout grid = new GridLayout(this);
+    grid.setColumnCount(5);
+    grid.setPadding(5, 5, 5, 5);
+
+    int size = (int) (55 * getResources().getDisplayMetrics().density);
+    int margin = (int) (5 * getResources().getDisplayMetrics().density);
+
+    for (final int color : colors) {
+
+        TextView colorBox = new TextView(this);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(14);
+        bg.setStroke(
+                color == currentColor ? 5 : 2,
+                color == currentColor ? 0xFF1976D2 : 0xFFBDBDBD
+        );
+
+        colorBox.setBackground(bg);
+
+        GridLayout.LayoutParams params =
+                new GridLayout.LayoutParams();
+
+        params.width = size;
+        params.height = size;
+        params.setMargins(margin, margin, margin, margin);
+
+        colorBox.setLayoutParams(params);
+
+        colorBox.setOnClickListener(v -> {
+
+            listener.onColorSelected(color);
+
+            dialog.dismiss();
+        });
+
+        grid.addView(colorBox);
     }
+
+    root.addView(grid);
+
+    Button cancel = new Button(this);
+    cancel.setText("انصراف");
+
+    cancel.setOnClickListener(v ->
+            dialog.dismiss()
+    );
+
+    root.addView(cancel);
+
+    dialog.setContentView(root);
+
+    Window window = dialog.getWindow();
+
+    if (window != null) {
+        window.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+    }
+
+    dialog.show();
+
+    if (dialog.getWindow() != null) {
+        dialog.getWindow().setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+    }
+}
+
+
+interface ColorSelectedListener {
+    void onColorSelected(int color);
 }
