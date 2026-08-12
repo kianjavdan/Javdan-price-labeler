@@ -1994,4 +1994,4 @@ public class LabelDesignerView extends View {
                 )
         );
     }
-}
+            }
