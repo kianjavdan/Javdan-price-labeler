@@ -23,6 +23,7 @@ public class LabelDesignerView extends View {
     private float downY;
 
     private final RectF workingRect = new RectF();
+    private final RectF productPreviewRect = new RectF();
 
     private Listener listener;
 
@@ -30,26 +31,36 @@ public class LabelDesignerView extends View {
     public int canvasBackground = 0xFFF2F2F2;
     public float labelWidthPct = 0.38f;
 
+    // تصویر محصول
     public float productX = 0.02f;
     public float productY = 0.05f;
     public float productW = 0.58f;
     public float productH = 0.90f;
 
     private static final int MODE_NONE = 0;
-    private static final int MODE_DRAG = 1;
-    private static final int MODE_RESIZE = 2;
+    private static final int MODE_FIELD_DRAG = 1;
+    private static final int MODE_FIELD_RESIZE = 2;
+    private static final int MODE_PRODUCT_DRAG = 3;
+    private static final int MODE_PRODUCT_RESIZE = 4;
 
     private int touchMode = MODE_NONE;
 
     private static final float MIN_FIELD_W = 0.16f;
     private static final float MIN_FIELD_H = 0.08f;
 
+    private static final float MIN_PRODUCT_W = 0.15f;
+    private static final float MIN_PRODUCT_H = 0.15f;
+
     private float handleRadiusPx = 18f;
 
 
     public LabelDesignerView(Context context) {
         super(context);
-        setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+
+        setLayerType(
+                View.LAYER_TYPE_SOFTWARE,
+                null
+        );
 
         float density =
                 getResources()
@@ -67,6 +78,7 @@ public class LabelDesignerView extends View {
 
 
     public void setFields(ArrayList<LabelField> fields) {
+
         this.fields =
                 fields == null
                         ? new ArrayList<>()
@@ -82,13 +94,19 @@ public class LabelDesignerView extends View {
 
 
     public void setProductBitmap(Bitmap bitmap) {
-        this.productBitmap = bitmap;
+
+        this.productBitmap =
+                bitmap;
+
         invalidate();
     }
 
 
     public void select(int index) {
-        selected = index;
+
+        selected =
+                index;
+
         invalidate();
     }
 
@@ -100,9 +118,12 @@ public class LabelDesignerView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
+
         super.onDraw(canvas);
 
-        canvas.drawColor(canvasBackground);
+        canvas.drawColor(
+                canvasBackground
+        );
 
         float width =
                 getWidth();
@@ -111,13 +132,22 @@ public class LabelDesignerView extends View {
                 getHeight();
 
 
-        drawProductPreview(
-                canvas,
-                width,
-                height
+        // محدوده محصول
+        productPreviewRect.set(
+                width * productX,
+                height * productY,
+                width * (productX + productW),
+                height * (productY + productH)
         );
 
 
+        drawProductPreview(
+                canvas,
+                productPreviewRect
+        );
+
+
+        // محدوده طراحی کادرهای قیمت
         workingRect.set(
                 width * 0.61f,
                 height * 0.06f,
@@ -151,50 +181,54 @@ public class LabelDesignerView extends View {
             );
 
 
-            if (i == selected) {
+            if (
+                    i == selected
+                            && touchMode != MODE_PRODUCT_DRAG
+                            && touchMode != MODE_PRODUCT_RESIZE
+            ) {
 
-                drawSelection(
+                drawFieldSelection(
                         canvas,
                         rect
                 );
             }
         }
+
+
+        // کادر انتخاب تصویر محصول
+        drawProductSelection(
+                canvas,
+                productPreviewRect
+        );
     }
 
 
     private void drawProductPreview(
             Canvas canvas,
-            float width,
-            float height
+            RectF area
     ) {
 
-        RectF area =
-                new RectF(
-                        width * productX,
-                        height * productY,
-                        width * (productX + productW),
-                        height * (productY + productH)
+        Paint base =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
                 );
 
+        base.setColor(
+                Color.WHITE
+        );
 
-        if (productBitmap == null) {
+        canvas.drawRoundRect(
+                area,
+                18,
+                18,
+                base
+        );
 
-            Paint empty =
-                    new Paint(
-                            Paint.ANTI_ALIAS_FLAG
-                    );
 
-            empty.setColor(
-                    Color.WHITE
-            );
-
-            canvas.drawRoundRect(
-                    area,
-                    18,
-                    18,
-                    empty
-            );
-
+        if (
+                productBitmap == null
+                        || productBitmap.isRecycled()
+        ) {
             return;
         }
 
@@ -284,7 +318,94 @@ public class LabelDesignerView extends View {
     }
 
 
-    private void drawSelection(
+    private void drawProductSelection(
+            Canvas canvas,
+            RectF rect
+    ) {
+
+        if (
+                productBitmap == null
+        ) {
+            return;
+        }
+
+
+        Paint selection =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
+
+        selection.setStyle(
+                Paint.Style.STROKE
+        );
+
+        selection.setStrokeWidth(
+                3f
+        );
+
+        selection.setColor(
+                0xFF00897B
+        );
+
+
+        canvas.drawRoundRect(
+                rect,
+                18,
+                18,
+                selection
+        );
+
+
+        Paint handle =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
+
+        handle.setStyle(
+                Paint.Style.FILL
+        );
+
+        handle.setColor(
+                0xFF00897B
+        );
+
+
+        canvas.drawCircle(
+                rect.right,
+                rect.bottom,
+                handleRadiusPx,
+                handle
+        );
+
+
+        Paint inner =
+                new Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                );
+
+        inner.setStyle(
+                Paint.Style.STROKE
+        );
+
+        inner.setStrokeWidth(
+                3f
+        );
+
+        inner.setColor(
+                Color.WHITE
+        );
+
+
+        canvas.drawCircle(
+                rect.right,
+                rect.bottom,
+                handleRadiusPx * 0.60f,
+                inner
+        );
+    }
+
+
+    private void drawFieldSelection(
             Canvas canvas,
             RectF rect
     ) {
@@ -440,7 +561,6 @@ public class LabelDesignerView extends View {
                         5f,
                         field.paddingHorizontal
                 );
-
 
         float verticalPadding =
                 Math.max(
@@ -634,8 +754,7 @@ public class LabelDesignerView extends View {
                 field.showToman
                         ? Math.max(
                         4f,
-                        pricePaint
-                                .getTextSize()
+                        pricePaint.getTextSize()
                                 * 0.12f
                 )
                         : 0f;
@@ -864,8 +983,7 @@ public class LabelDesignerView extends View {
         strikePaint.setStrokeWidth(
                 Math.max(
                         2f,
-                        pricePaint
-                                .getTextSize()
+                        pricePaint.getTextSize()
                                 * 0.055f
                 )
         );
@@ -873,8 +991,7 @@ public class LabelDesignerView extends View {
 
         float y =
                 baseline
-                        - pricePaint
-                        .getTextSize()
+                        - pricePaint.getTextSize()
                         * 0.34f;
 
 
@@ -892,19 +1009,13 @@ public class LabelDesignerView extends View {
             int align
     ) {
 
-        if (
-                align == 1
-        ) {
+        if (align == 1) {
             return Paint.Align.CENTER;
         }
 
-
-        if (
-                align == 2
-        ) {
+        if (align == 2) {
             return Paint.Align.LEFT;
         }
-
 
         return Paint.Align.RIGHT;
     }
@@ -916,24 +1027,13 @@ public class LabelDesignerView extends View {
             float right
     ) {
 
-        if (
-                align == 1
-        ) {
-
-            return (
-                    left
-                            + right
-            ) / 2f;
+        if (align == 1) {
+            return (left + right) / 2f;
         }
 
-
-        if (
-                align == 2
-        ) {
-
+        if (align == 2) {
             return left;
         }
-
 
         return right;
     }
@@ -952,55 +1052,39 @@ public class LabelDesignerView extends View {
 
         float left =
                 workingRect.left
-                        + field.x
-                        * lw;
-
+                        + field.x * lw;
 
         float top =
                 workingRect.top
-                        + field.y
-                        * lh;
-
-
-        float right =
-                left
-                        + field.w
-                        * lw;
-
-
-        float bottom =
-                top
-                        + field.h
-                        * lh;
+                        + field.y * lh;
 
 
         return new RectF(
                 left,
                 top,
-                right,
-                bottom
+                left + field.w * lw,
+                top + field.h * lh
         );
     }
 
 
-    private boolean pointInResizeHandle(
-            RectF rect,
-            float x,
-            float y
+    private boolean pointInHandle(
+            float handleX,
+            float handleY,
+            float touchX,
+            float touchY
     ) {
 
         float dx =
-                x
-                        - rect.right;
+                touchX - handleX;
 
         float dy =
-                y
-                        - rect.bottom;
+                touchY - handleY;
 
 
         float hitRadius =
                 handleRadiusPx
-                        * 1.8f;
+                        * 1.9f;
 
 
         return (
@@ -1034,68 +1118,129 @@ public class LabelDesignerView extends View {
                         MODE_NONE;
 
 
+                /*
+                 * اول بررسی Resize تصویر
+                 */
+                if (
+                        productBitmap != null
+                                && pointInHandle(
+                                productPreviewRect.right,
+                                productPreviewRect.bottom,
+                                touchX,
+                                touchY
+                        )
+                ) {
+
+                    touchMode =
+                            MODE_PRODUCT_RESIZE;
+
+                    selected =
+                            -1;
+
+                    downX =
+                            touchX;
+
+                    downY =
+                            touchY;
+
+                    getParent()
+                            .requestDisallowInterceptTouchEvent(
+                                    true
+                            );
+
+                    invalidate();
+
+                    return true;
+                }
+
+
+                /*
+                 * بعد بررسی Resize کادر انتخاب‌شده
+                 */
                 if (
                         selected >= 0
                                 && selected < fields.size()
                 ) {
 
                     LabelField selectedField =
-                            fields.get(
-                                    selected
-                            );
+                            fields.get(selected);
+
+                    RectF selectedRect =
+                            fieldRect(selectedField);
 
 
                     if (
-                            selectedField.visible
+                            pointInHandle(
+                                    selectedRect.right,
+                                    selectedRect.bottom,
+                                    touchX,
+                                    touchY
+                            )
                     ) {
 
-                        RectF selectedRect =
-                                fieldRect(
-                                        selectedField
+                        touchMode =
+                                MODE_FIELD_RESIZE;
+
+                        downX =
+                                touchX;
+
+                        downY =
+                                touchY;
+
+                        getParent()
+                                .requestDisallowInterceptTouchEvent(
+                                        true
                                 );
 
-
-                        if (
-                                pointInResizeHandle(
-                                        selectedRect,
-                                        touchX,
-                                        touchY
-                                )
-                        ) {
-
-                            touchMode =
-                                    MODE_RESIZE;
-
-
-                            downX =
-                                    touchX;
-
-                            downY =
-                                    touchY;
-
-
-                            getParent()
-                                    .requestDisallowInterceptTouchEvent(
-                                            true
-                                    );
-
-
-                            invalidate();
-
-                            return true;
-                        }
+                        return true;
                     }
                 }
 
 
+                /*
+                 * لمس خود تصویر = Drag تصویر
+                 */
+                if (
+                        productBitmap != null
+                                && productPreviewRect.contains(
+                                touchX,
+                                touchY
+                        )
+                ) {
+
+                    touchMode =
+                            MODE_PRODUCT_DRAG;
+
+                    selected =
+                            -1;
+
+                    downX =
+                            touchX;
+
+                    downY =
+                            touchY;
+
+                    getParent()
+                            .requestDisallowInterceptTouchEvent(
+                                    true
+                            );
+
+                    invalidate();
+
+                    return true;
+                }
+
+
+                /*
+                 * انتخاب کادر قیمت
+                 */
                 selected =
                         -1;
 
 
                 for (
                         int i =
-                                fields.size()
-                                        - 1;
+                                fields.size() - 1;
                         i >= 0;
                         i--
                 ) {
@@ -1103,13 +1248,9 @@ public class LabelDesignerView extends View {
                     LabelField f =
                             fields.get(i);
 
-
-                    if (
-                            !f.visible
-                    ) {
+                    if (!f.visible) {
                         continue;
                     }
-
 
                     RectF rect =
                             fieldRect(f);
@@ -1142,7 +1283,7 @@ public class LabelDesignerView extends View {
                 ) {
 
                     touchMode =
-                            MODE_DRAG;
+                            MODE_FIELD_DRAG;
 
 
                     getParent()
@@ -1155,10 +1296,9 @@ public class LabelDesignerView extends View {
                             listener != null
                     ) {
 
-                        listener
-                                .onFieldSelected(
-                                        selected
-                                );
+                        listener.onFieldSelected(
+                                selected
+                        );
                     }
                 }
 
@@ -1171,6 +1311,112 @@ public class LabelDesignerView extends View {
 
             case MotionEvent.ACTION_MOVE: {
 
+
+                /*
+                 * جابه‌جایی تصویر محصول
+                 */
+                if (
+                        touchMode
+                                == MODE_PRODUCT_DRAG
+                ) {
+
+                    float dx =
+                            (
+                                    touchX
+                                            - downX
+                            )
+                                    / getWidth();
+
+
+                    float dy =
+                            (
+                                    touchY
+                                            - downY
+                            )
+                                    / getHeight();
+
+
+                    productX =
+                            clamp(
+                                    productX + dx,
+                                    0f,
+                                    1f - productW
+                            );
+
+
+                    productY =
+                            clamp(
+                                    productY + dy,
+                                    0f,
+                                    1f - productH
+                            );
+
+
+                    downX =
+                            touchX;
+
+                    downY =
+                            touchY;
+
+
+                    invalidate();
+
+                    return true;
+                }
+
+
+                /*
+                 * Resize تصویر محصول
+                 */
+                if (
+                        touchMode
+                                == MODE_PRODUCT_RESIZE
+                ) {
+
+                    float rightPct =
+                            touchX
+                                    / getWidth();
+
+
+                    float bottomPct =
+                            touchY
+                                    / getHeight();
+
+
+                    rightPct =
+                            clamp(
+                                    rightPct,
+                                    productX
+                                            + MIN_PRODUCT_W,
+                                    1f
+                            );
+
+
+                    bottomPct =
+                            clamp(
+                                    bottomPct,
+                                    productY
+                                            + MIN_PRODUCT_H,
+                                    1f
+                            );
+
+
+                    productW =
+                            rightPct
+                                    - productX;
+
+
+                    productH =
+                            bottomPct
+                                    - productY;
+
+
+                    invalidate();
+
+                    return true;
+                }
+
+
                 if (
                         selected < 0
                                 || selected >= fields.size()
@@ -1181,14 +1427,15 @@ public class LabelDesignerView extends View {
 
 
                 LabelField field =
-                        fields.get(
-                                selected
-                        );
+                        fields.get(selected);
 
 
+                /*
+                 * Drag کادر قیمت
+                 */
                 if (
                         touchMode
-                                == MODE_DRAG
+                                == MODE_FIELD_DRAG
                 ) {
 
                     float dx =
@@ -1208,26 +1455,18 @@ public class LabelDesignerView extends View {
 
 
                     field.x =
-                            Math.max(
+                            clamp(
+                                    field.x + dx,
                                     0f,
-                                    Math.min(
-                                            1f
-                                                    - field.w,
-                                            field.x
-                                                    + dx
-                                    )
+                                    1f - field.w
                             );
 
 
                     field.y =
-                            Math.max(
+                            clamp(
+                                    field.y + dy,
                                     0f,
-                                    Math.min(
-                                            1f
-                                                    - field.h,
-                                            field.y
-                                                    + dy
-                                    )
+                                    1f - field.h
                             );
 
 
@@ -1244,9 +1483,12 @@ public class LabelDesignerView extends View {
                 }
 
 
+                /*
+                 * Resize کادر قیمت
+                 */
                 if (
                         touchMode
-                                == MODE_RESIZE
+                                == MODE_FIELD_RESIZE
                 ) {
 
                     float newRightPct =
@@ -1309,7 +1551,6 @@ public class LabelDesignerView extends View {
 
                 if (
                         listener != null
-                                && selected >= 0
                 ) {
 
                     listener.onChanged();
@@ -1385,9 +1626,7 @@ public class LabelDesignerView extends View {
         RectF labelArea;
 
 
-        if (
-                append
-        ) {
+        if (append) {
 
             int outW =
                     sw
@@ -1404,9 +1643,7 @@ public class LabelDesignerView extends View {
 
 
             Canvas canvas =
-                    new Canvas(
-                            output
-                    );
+                    new Canvas(output);
 
 
             canvas.drawColor(
@@ -1416,23 +1653,10 @@ public class LabelDesignerView extends View {
 
             productArea =
                     new RectF(
-                            productX
-                                    * sw,
-
-                            productY
-                                    * sh,
-
-                            (
-                                    productX
-                                            + productW
-                            )
-                                    * sw,
-
-                            (
-                                    productY
-                                            + productH
-                            )
-                                    * sh
+                            productX * sw,
+                            productY * sh,
+                            (productX + productW) * sw,
+                            (productY + productH) * sh
                     );
 
 
@@ -1445,13 +1669,9 @@ public class LabelDesignerView extends View {
 
             labelArea =
                     new RectF(
-                            sw
-                                    + gap,
-
+                            sw + gap,
                             0,
-
                             outW,
-
                             sh
                     );
 
@@ -1467,9 +1687,7 @@ public class LabelDesignerView extends View {
 
 
             Canvas canvas =
-                    new Canvas(
-                            output
-                    );
+                    new Canvas(output);
 
 
             canvas.drawColor(
@@ -1479,23 +1697,10 @@ public class LabelDesignerView extends View {
 
             productArea =
                     new RectF(
-                            productX
-                                    * sw,
-
-                            productY
-                                    * sh,
-
-                            (
-                                    productX
-                                            + productW
-                            )
-                                    * sw,
-
-                            (
-                                    productY
-                                            + productH
-                            )
-                                    * sh
+                            productX * sw,
+                            productY * sh,
+                            (productX + productW) * sw,
+                            (productY + productH) * sh
                     );
 
 
@@ -1518,12 +1723,9 @@ public class LabelDesignerView extends View {
                             sw
                                     - labelAreaW
                                     - margin,
-
                             margin,
-
                             sw
                                     - margin,
-
                             sh
                                     - margin
                     );
@@ -1531,19 +1733,14 @@ public class LabelDesignerView extends View {
 
 
         Canvas canvas =
-                new Canvas(
-                        output
-                );
+                new Canvas(output);
 
 
         for (
-                LabelField field
-                        : fields
+                LabelField field : fields
         ) {
 
-            if (
-                    !field.visible
-            ) {
+            if (!field.visible) {
                 continue;
             }
 
@@ -1606,17 +1803,13 @@ public class LabelDesignerView extends View {
 
 
         while (
-                paint.measureText(
-                        text
-                )
+                paint.measureText(text)
                         > maxWidth
-                        && size
-                        > minPx
+                        && size > minPx
         ) {
 
             size -=
                     1f;
-
 
             paint.setTextSize(
                     size
@@ -1660,4 +1853,4 @@ public class LabelDesignerView extends View {
                 .getDisplayMetrics()
                 .scaledDensity;
     }
-                }
+                        }
