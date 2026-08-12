@@ -545,11 +545,8 @@ public class MainActivity extends Activity {
                 f.strike = true;
             }
 
-            /*
-             * اندازه‌های جمع‌وجورتر برای جلوگیری از تداخل
-             */
-            f.titleSize = 0.22f;
-            f.priceSize = 0.34f;
+            f.titleSize = 22;
+            f.priceSize = 34;
         }
     }
 
@@ -1562,10 +1559,6 @@ public class MainActivity extends Activity {
     }
 
 
-    /*
-     * فقط ستون‌هایی که عنوانشان شامل «قیمت» است
-     * وارد لیبل می‌شوند.
-     */
     private boolean isPriceColumn(
             String header
     ) {
@@ -1764,11 +1757,6 @@ public class MainActivity extends Activity {
                             fs.add(f);
                         }
 
-                        /*
-                         * مهم:
-                         * برای تعداد واقعی قیمت‌های همین محصول
-                         * چیدمان مرتب دوباره ساخته می‌شود.
-                         */
                         layoutBatchFields(fs);
 
                         Bitmap out =
@@ -1830,9 +1818,6 @@ public class MainActivity extends Activity {
     }
 
 
-    /*
-     * چیدمان مرتب برای خروجی گروهی
-     */
     private void layoutBatchFields(
             ArrayList<LabelField> fs
     ) {
@@ -1879,18 +1864,15 @@ public class MainActivity extends Activity {
             f.strike =
                     i == 0;
 
-            /*
-             * اندازه متن برای هر ردیف
-             */
             if (n <= 4) {
-                f.titleSize = 0.22f;
-                f.priceSize = 0.35f;
+                f.titleSize = 22;
+                f.priceSize = 35;
             } else if (n <= 6) {
-                f.titleSize = 0.19f;
-                f.priceSize = 0.29f;
+                f.titleSize = 19;
+                f.priceSize = 29;
             } else {
-                f.titleSize = 0.16f;
-                f.priceSize = 0.24f;
+                f.titleSize = 16;
+                f.priceSize = 24;
             }
         }
     }
@@ -2075,4 +2057,4 @@ public class MainActivity extends Activity {
             makeDefaults();
         }
     }
-}
+                               }
