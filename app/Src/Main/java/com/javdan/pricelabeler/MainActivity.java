@@ -9,6 +9,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.provider.*;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.*;
 import android.widget.*;
 
@@ -20,7 +22,7 @@ import java.util.*;
 
 public class MainActivity extends Activity {
 
-    static final int PICK_EXCEL = 10, PICK_IMAGE = 11, PICK_FOLDER = 12;
+    static final int PICK_EXCEL = 10, PICK_IMAGE = 11, PICK_FOLDER = 12, PICK_BACKGROUND = 13;
 
     LinearLayout body, manualRows, excelInfo, fieldEditorContainer;
     Button tabData, tabDesigner, tabOutput;
@@ -54,6 +56,22 @@ public class MainActivity extends Activity {
     float settingProductY = 0.08f;
     float settingProductW = 0.62f;
     float settingProductH = 0.84f;
+    float settingProductZoom = 1.0f;
+
+    // WYSIWYG background + panel placement
+    int settingBackgroundMode = LabelDesignerView.BG_SOLID;
+    int settingBackgroundColor = 0xFFF2F2F2;
+    int settingGradientColor1 = 0xFFFFFFFF;
+    int settingGradientColor2 = 0xFFE8EEF8;
+    float settingGradientAngle = 0f;
+    int settingBackgroundAlpha = 255;
+    int settingPatternIndex = 0;
+    String settingCustomBackgroundUri = "";
+    Bitmap customBackgroundBitmap;
+    float settingLabelX = 0.70f;
+    float settingLabelY = 0.12f;
+    float settingFieldGapPx = 6f;
+    float settingPanelPaddingPx = 10f;
 
     boolean settingCropEnabled = false;
     float settingCropLeft = 0f;
@@ -103,6 +121,66 @@ public class MainActivity extends Activity {
         l.setOrientation(LinearLayout.HORIZONTAL);
         l.setGravity(Gravity.CENTER_VERTICAL);
         return l;
+    }
+
+    interface FloatChanged { void onChanged(float value); }
+
+    private LinearLayout slider(String label, float min, float max, float value, float step, String suffix, FloatChanged cb){
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(4,6,4,6);
+        LinearLayout head = row();
+        TextView name = tv(label,13,false);
+        TextView val = tv("",13,true);
+        val.setGravity(Gravity.END);
+        head.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+        head.addView(val,new LinearLayout.LayoutParams(-2,-2));
+        box.addView(head);
+        SeekBar seek = new SeekBar(this);
+        int steps = Math.max(1,Math.round((max-min)/step));
+        seek.setMax(steps);
+        int initial = clampInt(Math.round((value-min)/step),0,steps);
+        seek.setProgress(initial);
+        box.addView(seek);
+        float initialValue = min + initial*step;
+        val.setText((step < 1f ? String.format(Locale.US,"%.2f",initialValue) : String.valueOf(Math.round(initialValue))) + (suffix==null?"":suffix));
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onProgressChanged(SeekBar b,int progress,boolean fromUser){
+                float v=min+progress*step;
+                val.setText((step < 1f ? String.format(Locale.US,"%.2f",v) : String.valueOf(Math.round(v))) + (suffix==null?"":suffix));
+                if(cb!=null)cb.onChanged(v);
+            }
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+        });
+        return box;
+    }
+
+    private LinearLayout accordion(String title, boolean expanded){
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        Button header = btn((expanded?"▼  ":"▶  ")+title);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(8,2,8,8);
+        content.setVisibility(expanded?View.VISIBLE:View.GONE);
+        header.setOnClickListener(v->{
+            boolean open=content.getVisibility()==View.VISIBLE;
+            content.setVisibility(open?View.GONE:View.VISIBLE);
+            header.setText((open?"▶  ":"▼  ")+title);
+        });
+        wrap.addView(header); wrap.addView(content);
+        wrap.setTag(content);
+        return wrap;
+    }
+
+    private LinearLayout accordionContent(LinearLayout accordion){ return (LinearLayout)accordion.getTag(); }
+
+    private void designerChanged(){
+        if(designer!=null) designer.invalidate();
+        syncDesignerSettingsFromView();
+        saveDesignerSettings();
+        saveTemplate();
     }
 
     private EditText numberEdit(String value, String hint){
@@ -403,361 +481,127 @@ public class MainActivity extends Activity {
         if (manualRows != null && manualRows.getParent() != null) syncManualRows();
         clear();
 
-        body.addView(section("طراح حرفه‌ای برچسب"));
-        body.addView(tv("استایل نمونه: قاب اصلی جمع‌وجور + Auto Height + کادرهای فشرده. روی عنوان یا قیمت بزن تا سایز فونت را سریع تغییر بدهی.",13,false));
+        body.addView(section("طراح WYSIWYG برچسب"));
+        body.addView(tv("Preview و JPG/PNG از یک Render Engine مشترک ساخته می‌شوند؛ تمام Sliderها Live هستند.",13,false));
 
         designer = new LabelDesignerView(this);
         applyDesignerSettingsToView(designer);
         designer.setFields(fields);
         designer.setProductBitmap(currentBitmap);
-
+        designer.setCustomBackgroundBitmap(customBackgroundBitmap);
         body.addView(designer, new LinearLayout.LayoutParams(-1, 1020));
 
         designer.setListener(new LabelDesignerView.Listener() {
-            @Override
-            public void onFieldSelected(int i) {
-                selectedField = i;
-                showFieldEditor();
-            }
-
-            @Override
-            public void onChanged() {
-                syncDesignerSettingsFromView();
-                saveTemplate();
-                saveDesignerSettings();
-            }
-
-            @Override
-            public void onTextClicked(int fieldIndex, int textType) {
-                selectedField = fieldIndex;
-                showQuickTextSizeDialog(fieldIndex, textType);
-            }
+            @Override public void onFieldSelected(int i) { selectedField=i; showFieldEditor(); }
+            @Override public void onChanged() { designerChanged(); }
+            @Override public void onTextClicked(int fieldIndex, int textType) { selectedField=fieldIndex; showFieldEditor(); }
         });
 
-        body.addView(section("تنظیمات لیبل"));
+        // BACKGROUND
+        LinearLayout bgAcc=accordion("Background",true); body.addView(bgAcc); LinearLayout bg=accordionContent(bgAcc);
+        RadioGroup bgModes=new RadioGroup(this); bgModes.setOrientation(RadioGroup.HORIZONTAL);
+        String[] bgNames={"رنگ ساده","Gradient","Pattern","تصویر"};
+        for(int i=0;i<bgNames.length;i++){ final int mode=i; RadioButton rb=new RadioButton(this); rb.setText(bgNames[i]); rb.setChecked(settingBackgroundMode==i); rb.setOnClickListener(v->{settingBackgroundMode=mode; designer.backgroundMode=mode; designerChanged();}); bgModes.addView(rb); }
+        bg.addView(bgModes);
 
-        EditText labelWidth = numberEdit(String.valueOf(Math.round(settingLabelWidth*100f)), "28");
-        EditText gapPx = numberEdit(String.valueOf(Math.round(settingFieldGap*1000f)), "14");
-        EditText radius = numberEdit(String.valueOf(settingOuterRadius), "22");
-        EditText borderWidth = numberEdit(String.valueOf(settingOuterBorderWidth), "3");
+        Button bgColor=colorButton("رنگ Background",settingBackgroundColor); bg.addView(bgColor);
+        bgColor.setOnClickListener(v->showColorPalette("رنگ Background",settingBackgroundColor,c->{settingBackgroundColor=c;designer.canvasBackground=c;refreshColorButton(bgColor,"رنگ Background",c);designerChanged();}));
+        Button g1=colorButton("Gradient رنگ اول",settingGradientColor1), g2=colorButton("Gradient رنگ دوم",settingGradientColor2);
+        bg.addView(g1);bg.addView(g2);
+        g1.setOnClickListener(v->showColorPalette("Gradient رنگ اول",settingGradientColor1,c->{settingGradientColor1=c;designer.gradientColor1=c;refreshColorButton(g1,"Gradient رنگ اول",c);settingBackgroundMode=LabelDesignerView.BG_GRADIENT;designer.backgroundMode=settingBackgroundMode;designerChanged();}));
+        g2.setOnClickListener(v->showColorPalette("Gradient رنگ دوم",settingGradientColor2,c->{settingGradientColor2=c;designer.gradientColor2=c;refreshColorButton(g2,"Gradient رنگ دوم",c);settingBackgroundMode=LabelDesignerView.BG_GRADIENT;designer.backgroundMode=settingBackgroundMode;designerChanged();}));
+        bg.addView(slider("زاویه Gradient",0,360,settingGradientAngle,5,"°",v->{settingGradientAngle=v;designer.gradientAngle=v;designerChanged();}));
+        bg.addView(slider("شفافیت Background",0,255,settingBackgroundAlpha,1,"",v->{settingBackgroundAlpha=Math.round(v);designer.backgroundAlpha=settingBackgroundAlpha;designerChanged();}));
 
-        addLabeledEdit(body,"عرض لیبل از کل تصویر %",labelWidth);
-        addLabeledEdit(body,"فاصله بین کادرها (کمتر = جمع‌وجورتر)",gapPx);
-        addLabeledEdit(body,"گردی گوشه قاب اصلی",radius);
-        addLabeledEdit(body,"ضخامت قاب اصلی",borderWidth);
+        bg.addView(tv("Patternهای آماده — لمس = نمایش فوری",13,true));
+        String[] patterns={"موج آبی","موج طلایی","موج بنفش","خطوط مورب","خطوط ظریف","نقطه‌ای","هندسی","مشکی لوکس","ترمه","طرح ایرانی","سفید مینیمال"};
+        GridLayout pg=new GridLayout(this);pg.setColumnCount(3);
+        for(int i=0;i<patterns.length;i++){ final int ix=i; Button b=btn(patterns[i]); b.setOnClickListener(v->{settingPatternIndex=ix;settingBackgroundMode=LabelDesignerView.BG_PATTERN;designer.patternIndex=ix;designer.backgroundMode=settingBackgroundMode;designerChanged();}); pg.addView(b); }
+        bg.addView(pg);
+        Button customBg=btn("افزودن طرح دلخواه JPG / PNG"); bg.addView(customBg);
+        customBg.setOnClickListener(v->pickFile("image/*",PICK_BACKGROUND));
 
-        Button outerColorBtn = colorButton("رنگ قاب اصلی", settingOuterColor);
-        body.addView(outerColorBtn);
-        outerColorBtn.setOnClickListener(v -> showColorPalette("رنگ قاب اصلی", settingOuterColor, color -> {
-            settingOuterColor = color;
-            if (designer != null) {
-                designer.outerTagColor = color;
-                designer.invalidate();
-            }
-            refreshColorButton(outerColorBtn,"رنگ قاب اصلی",color);
-            saveDesignerSettings();
-        }));
+        // PRODUCT / CROP
+        LinearLayout prodAcc=accordion("Resize + Crop محصول",false);body.addView(prodAcc);LinearLayout prod=accordionContent(prodAcc);
+        prod.addView(slider("موقعیت افقی محصول X",-20,100,settingProductX*100f,1,"%",v->{settingProductX=v/100f;designer.productX=settingProductX;designerChanged();}));
+        prod.addView(slider("موقعیت عمودی محصول Y",-20,100,settingProductY*100f,1,"%",v->{settingProductY=v/100f;designer.productY=settingProductY;designerChanged();}));
+        prod.addView(slider("عرض محصول",5,120,settingProductW*100f,1,"%",v->{settingProductW=v/100f;designer.productW=settingProductW;designerChanged();}));
+        prod.addView(slider("ارتفاع محصول",5,120,settingProductH*100f,1,"%",v->{settingProductH=v/100f;designer.productH=settingProductH;designerChanged();}));
+        prod.addView(slider("Zoom محصول",25,200,settingProductZoom*100f,1,"%",v->{settingProductZoom=v/100f;designer.productZoom=settingProductZoom;designerChanged();}));
+        LinearLayout cr=row();Button crop=btn("✂ Crop تصویر");Button reset=btn("Reset Crop");Button apply=btn("Apply Crop");cr.addView(crop,new LinearLayout.LayoutParams(0,-2,1));cr.addView(reset,new LinearLayout.LayoutParams(0,-2,1));cr.addView(apply,new LinearLayout.LayoutParams(0,-2,1));prod.addView(cr);
+        crop.setOnClickListener(v->{designer.setCropMode(true);Toast.makeText(this,"چهار گوشه Crop را روی Preview بکش",Toast.LENGTH_SHORT).show();});
+        reset.setOnClickListener(v->{designer.resetCrop();designer.setCropMode(true);designerChanged();});
+        apply.setOnClickListener(v->{designer.setCropMode(false);designerChanged();});
+        groupCropCheck=check("همین Crop روی همه تصاویر خروجی گروهی اعمال شود",true);prod.addView(groupCropCheck);
+        Button sample=btn("انتخاب / تغییر عکس نمونه");prod.addView(sample);sample.setOnClickListener(v->pickFile("image/*",PICK_IMAGE));
 
-        CheckBox autoHeight = check("ارتفاع لیبل خودکار (Auto Height)", settingAutoHeight);
-        body.addView(autoHeight);
+        // MAIN PANEL
+        LinearLayout panelAcc=accordion("قاب اصلی لیبل",false);body.addView(panelAcc);LinearLayout panel=accordionContent(panelAcc);
+        panel.addView(slider("عرض کل پنل لیبل",12,60,settingLabelWidth*100f,1,"%",v->{settingLabelWidth=v/100f;designer.labelWidthPct=settingLabelWidth;designerChanged();}));
+        panel.addView(slider("موقعیت افقی پنل",0,100,settingLabelX*100f,1,"%",v->{settingLabelX=v/100f;designer.labelX=settingLabelX;designerChanged();}));
+        panel.addView(slider("موقعیت عمودی پنل",0,100,settingLabelY*100f,1,"%",v->{settingLabelY=v/100f;designer.labelY=settingLabelY;designerChanged();}));
+        panel.addView(slider("فاصله بین کادرها",0,40,settingFieldGapPx,1,"px",v->{settingFieldGapPx=v;designer.fieldGapPx=v;designerChanged();}));
+        panel.addView(slider("فاصله داخلی قاب اصلی",0,40,settingPanelPaddingPx,1,"px",v->{settingPanelPaddingPx=v;designer.panelPaddingPx=v;designerChanged();}));
+        panel.addView(slider("گردی گوشه قاب",0,100,settingOuterRadius,1,"px",v->{settingOuterRadius=Math.round(v);designer.outerTagRadius=settingOuterRadius;designerChanged();}));
+        panel.addView(slider("ضخامت حاشیه قاب",0,30,settingOuterBorderWidth,1,"px",v->{settingOuterBorderWidth=Math.round(v);designer.outerTagBorderWidth=settingOuterBorderWidth;designerChanged();}));
+        Button outer=colorButton("رنگ قاب اصلی",settingOuterColor);panel.addView(outer);outer.setOnClickListener(v->showColorPalette("رنگ قاب اصلی",settingOuterColor,c->{settingOuterColor=c;designer.outerTagColor=c;refreshColorButton(outer,"رنگ قاب اصلی",c);designerChanged();}));
+        Button outerBorder=colorButton("رنگ Border قاب",settingOuterBorderColor);panel.addView(outerBorder);outerBorder.setOnClickListener(v->showColorPalette("رنگ Border قاب",settingOuterBorderColor,c->{settingOuterBorderColor=c;designer.outerTagBorderColor=c;refreshColorButton(outerBorder,"رنگ Border قاب",c);designerChanged();}));
+        CheckBox autoHeight=check("ارتفاع لیبل خودکار (Auto Height)",settingAutoHeight);panel.addView(autoHeight);autoHeight.setOnCheckedChangeListener((b,c)->{settingAutoHeight=c;designer.autoHeight=c;designerChanged();});
 
-        Button applyLabel = btn("اعمال تنظیمات لیبل");
-        body.addView(applyLabel);
-        applyLabel.setOnClickListener(v -> {
-            settingLabelWidth = clamp(parseFloat(labelWidth, settingLabelWidth*100f)/100f, .20f, .45f);
-            settingFieldGap = clamp(parseFloat(gapPx, settingFieldGap*1000f)/1000f, .004f, .05f);
-            settingOuterRadius = parseIntSafe(radius, settingOuterRadius, 0, 80);
-            settingOuterBorderWidth = parseIntSafe(borderWidth, settingOuterBorderWidth, 0, 20);
-            settingAutoHeight = autoHeight.isChecked();
+        // FIELD EDITOR
+        LinearLayout fieldAcc=accordion("تنظیم کادر قیمت انتخاب‌شده",true);body.addView(fieldAcc);
+        fieldEditorContainer=accordionContent(fieldAcc);
+        if(!fields.isEmpty()){if(selectedField<0||selectedField>=fields.size())selectedField=0;designer.select(selectedField);showFieldEditor();}
 
-            applyDesignerSettingsToView(designer);
-            designer.invalidate();
-            saveDesignerSettings();
-
-            Toast.makeText(this,"تنظیمات لیبل اعمال شد",Toast.LENGTH_SHORT).show();
-        });
-
-        body.addView(section("رنگ کادرهای قیمت"));
-
-        for (int i=0;i<fields.size();i++){
-            final int idx = i;
-            LabelField f = fields.get(i);
-            Button cb = colorButton("کادر "+(i+1)+" — "+f.name, f.backgroundColor);
-            body.addView(cb);
-            cb.setOnClickListener(v -> showColorPalette("رنگ "+f.name, f.backgroundColor, color -> {
-                fields.get(idx).backgroundColor = color;
-                designer.setFields(fields);
-                refreshColorButton(cb,"کادر "+(idx+1)+" — "+fields.get(idx).name,color);
-                saveTemplate();
-            }));
-        }
-
-        body.addView(section("تصویر محصول — Resize + Crop"));
-
-        EditText productX = numberEdit(pct(settingProductX),"2");
-        EditText productY = numberEdit(pct(settingProductY),"8");
-        EditText productW = numberEdit(pct(settingProductW),"62");
-        EditText productH = numberEdit(pct(settingProductH),"84");
-
-        addLabeledEdit(body,"موقعیت افقی تصویر %",productX);
-        addLabeledEdit(body,"موقعیت عمودی تصویر %",productY);
-        addLabeledEdit(body,"عرض تصویر %",productW);
-        addLabeledEdit(body,"ارتفاع تصویر %",productH);
-
-        Button applyResize = btn("اعمال Resize تصویر");
-        body.addView(applyResize);
-        applyResize.setOnClickListener(v -> {
-            settingProductX = clamp(parsePercent(productX, settingProductX),0f,.95f);
-            settingProductY = clamp(parsePercent(productY, settingProductY),0f,.95f);
-            settingProductW = clamp(parsePercent(productW, settingProductW),.05f,1f-settingProductX);
-            settingProductH = clamp(parsePercent(productH, settingProductH),.05f,1f-settingProductY);
-
-            applyDesignerSettingsToView(designer);
-            designer.invalidate();
-            saveDesignerSettings();
-            Toast.makeText(this,"Resize تصویر اعمال شد",Toast.LENGTH_SHORT).show();
-        });
-
-        LinearLayout cropButtons = row();
-
-        Button cropBtn = btn("✂ Crop تصویر");
-        Button resetCrop = btn("بازنشانی Crop");
-
-        cropButtons.addView(cropBtn,new LinearLayout.LayoutParams(0,-2,1));
-        cropButtons.addView(resetCrop,new LinearLayout.LayoutParams(0,-2,1));
-        body.addView(cropButtons);
-
-        cropBtn.setOnClickListener(v -> showCropDialog());
-        resetCrop.setOnClickListener(v -> {
-            settingCropEnabled = false;
-            settingCropLeft = 0f;
-            settingCropTop = 0f;
-            settingCropRight = 1f;
-            settingCropBottom = 1f;
-
-            if (designer != null) designer.resetCrop();
-            saveDesignerSettings();
-        });
-
-        groupCropCheck = check("همین Crop روی همه تصاویر خروجی گروهی اعمال شود", false);
-        body.addView(groupCropCheck);
-
-        Button sample = btn("انتخاب / تغییر عکس نمونه");
-        body.addView(sample);
-        sample.setOnClickListener(v -> pickFile("image/*", PICK_IMAGE));
-
-        Button add = btn("+ افزودن کادر قیمت");
-        body.addView(add);
-        add.setOnClickListener(v -> {
-            fields.add(new LabelField("قیمت جدید",""));
-            relayoutFields();
-            designer.setFields(fields);
-            selectedField = fields.size()-1;
-            designer.select(selectedField);
-            showFieldEditor();
-            saveTemplate();
-        });
-
-        Button auto = btn("چیدمان مرتب خودکار کادرها");
-        body.addView(auto);
-        auto.setOnClickListener(v -> {
-            relayoutFields();
-            designer.setFields(fields);
-            saveTemplate();
-        });
-
-        Button save = btn("ذخیره قالب");
-        body.addView(save);
-        save.setOnClickListener(v -> {
-            syncDesignerSettingsFromView();
-            saveTemplate();
-            saveDesignerSettings();
-            Toast.makeText(this,"قالب ذخیره شد",Toast.LENGTH_SHORT).show();
-        });
-
-        body.addView(section("تنظیمات کادر انتخاب‌شده"));
-
-        fieldEditorContainer = new LinearLayout(this);
-        fieldEditorContainer.setOrientation(LinearLayout.VERTICAL);
-        body.addView(fieldEditorContainer);
-
-        if (!fields.isEmpty()){
-            if (selectedField < 0 || selectedField >= fields.size()) selectedField = 0;
-            designer.select(selectedField);
-            showFieldEditor();
-        }
+        LinearLayout actions=row(); Button add=btn("+ افزودن کادر");Button save=btn("ذخیره Template");actions.addView(add,new LinearLayout.LayoutParams(0,-2,1));actions.addView(save,new LinearLayout.LayoutParams(0,-2,1));body.addView(actions);
+        add.setOnClickListener(v->{fields.add(new LabelField("قیمت جدید",""));selectedField=fields.size()-1;designer.setFields(fields);designer.select(selectedField);showFieldEditor();designerChanged();});
+        save.setOnClickListener(v->{designerChanged();Toast.makeText(this,"Template ذخیره شد",Toast.LENGTH_SHORT).show();});
     }
 
     private void showFieldEditor(){
-        if (fieldEditorContainer == null || selectedField < 0 || selectedField >= fields.size()) return;
-
+        if(fieldEditorContainer==null||selectedField<0||selectedField>=fields.size())return;
         fieldEditorContainer.removeAllViews();
+        final LabelField f=fields.get(selectedField);
+        TextView selectedLabel=tv("در حال ویرایش: "+f.name,14,true);fieldEditorContainer.addView(selectedLabel);
 
-        LabelField f = fields.get(selectedField);
+        EditText name=textEdit(f.name,"عنوان"); EditText value=textEdit(f.value,"قیمت");
+        addLabeledEdit(fieldEditorContainer,"عنوان",name);addLabeledEdit(fieldEditorContainer,"قیمت",value);
+        name.addTextChangedListener(new SimpleWatcher(){public void afterTextChanged(Editable e){f.name=e.toString();selectedLabel.setText("در حال ویرایش: "+f.name);designerChanged();}});
+        value.addTextChangedListener(new SimpleWatcher(){public void afterTextChanged(Editable e){f.value=e.toString();designerChanged();}});
 
-        TextView selectedLabel = tv("در حال ویرایش: "+f.name,14,true);
-        fieldEditorContainer.addView(selectedLabel);
+        Spinner titleFont=makeSpinner(FONT_LABELS,fontIndex(f.titleFont));Spinner priceFont=makeSpinner(FONT_LABELS,fontIndex(f.priceFont));Spinner align=makeSpinner(ALIGN_LABELS,clampInt(f.textAlign,0,2));
+        addLabeledSpinner(fieldEditorContainer,"فونت عنوان",titleFont);addLabeledSpinner(fieldEditorContainer,"فونت قیمت",priceFont);addLabeledSpinner(fieldEditorContainer,"Alignment",align);
+        AdapterView.OnItemSelectedListener fontListener=new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int pos,long id){f.titleFont=FONT_VALUES[titleFont.getSelectedItemPosition()];f.priceFont=FONT_VALUES[priceFont.getSelectedItemPosition()];f.textAlign=align.getSelectedItemPosition();designerChanged();}};
+        titleFont.setOnItemSelectedListener(fontListener);priceFont.setOnItemSelectedListener(fontListener);align.setOnItemSelectedListener(fontListener);
 
-        EditText name = textEdit(f.name,"نام کادر");
-        EditText val = textEdit(f.value,"قیمت");
+        fieldEditorContainer.addView(slider("اندازه فونت عنوان",8,72,f.titleSize,1,"sp",v->{f.titleSize=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("اندازه فونت قیمت",10,100,f.priceSize,1,"sp",v->{f.priceSize=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("اندازه فونت تومان",7,60,f.tomanSize,1,"sp",v->{f.tomanSize=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("فاصله عنوان تا قیمت",0,50,f.titlePriceGap,1,"px",v->{f.titlePriceGap=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("Padding افقی",0,80,f.paddingHorizontal,1,"px",v->{f.paddingHorizontal=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("Padding عمودی",0,80,f.paddingVertical,1,"px",v->{f.paddingVertical=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("گردی گوشه‌ها",0,100,f.cornerRadius,1,"px",v->{f.cornerRadius=Math.round(v);designerChanged();}));
+        fieldEditorContainer.addView(slider("ضخامت Border",0,30,f.borderWidth,1,"px",v->{f.borderWidth=Math.round(v);designerChanged();}));
 
-        addLabeledEdit(fieldEditorContainer,"عنوان",name);
-        addLabeledEdit(fieldEditorContainer,"قیمت",val);
+        Button titleColor=colorButton("رنگ عنوان",f.titleColor), priceColor=colorButton("رنگ قیمت",f.priceColor), tomanColor=colorButton("رنگ تومان",f.tomanColor), bgColor=colorButton("Background کادر",f.backgroundColor), borderColor=colorButton("Border کادر",f.borderColor);
+        fieldEditorContainer.addView(titleColor);fieldEditorContainer.addView(priceColor);fieldEditorContainer.addView(tomanColor);fieldEditorContainer.addView(bgColor);fieldEditorContainer.addView(borderColor);
+        titleColor.setOnClickListener(v->showColorPalette("رنگ عنوان",f.titleColor,c->{f.titleColor=c;refreshColorButton(titleColor,"رنگ عنوان",c);designerChanged();}));
+        priceColor.setOnClickListener(v->showColorPalette("رنگ قیمت",f.priceColor,c->{f.priceColor=c;refreshColorButton(priceColor,"رنگ قیمت",c);designerChanged();}));
+        tomanColor.setOnClickListener(v->showColorPalette("رنگ تومان",f.tomanColor,c->{f.tomanColor=c;refreshColorButton(tomanColor,"رنگ تومان",c);designerChanged();}));
+        bgColor.setOnClickListener(v->showColorPalette("Background کادر",f.backgroundColor,c->{f.backgroundColor=c;refreshColorButton(bgColor,"Background کادر",c);designerChanged();}));
+        borderColor.setOnClickListener(v->showColorPalette("Border کادر",f.borderColor,c->{f.borderColor=c;refreshColorButton(borderColor,"Border کادر",c);designerChanged();}));
 
-        Spinner titleFont = makeSpinner(FONT_LABELS,fontIndex(f.titleFont));
-        Spinner priceFont = makeSpinner(FONT_LABELS,fontIndex(f.priceFont));
-        Spinner align = makeSpinner(ALIGN_LABELS,clampInt(f.textAlign,0,2));
+        CheckBox showTitle=check("نمایش عنوان",f.showTitle),showPrice=check("نمایش قیمت",f.showPrice),showToman=check("نمایش تومان",f.showToman),visible=check("نمایش کادر",f.visible),strike=check("Strike-through قیمت",f.strike),titleBold=check("عنوان Bold",f.titleBold),titleItalic=check("عنوان Italic",f.titleItalic),priceBold=check("قیمت Bold",f.priceBold),priceItalic=check("قیمت Italic",f.priceItalic);
+        CheckBox[] boxes={showTitle,showPrice,showToman,visible,strike,titleBold,titleItalic,priceBold,priceItalic};for(CheckBox b:boxes)fieldEditorContainer.addView(b);
+        CompoundButton.OnCheckedChangeListener checks=(button,checked)->{f.showTitle=showTitle.isChecked();f.showPrice=showPrice.isChecked();f.showToman=showToman.isChecked();f.visible=visible.isChecked();f.strike=strike.isChecked();f.titleBold=titleBold.isChecked();f.titleItalic=titleItalic.isChecked();f.priceBold=priceBold.isChecked();f.priceItalic=priceItalic.isChecked();designerChanged();};for(CheckBox b:boxes)b.setOnCheckedChangeListener(checks);
 
-        addLabeledSpinner(fieldEditorContainer,"فونت عنوان",titleFont);
-        addLabeledSpinner(fieldEditorContainer,"فونت قیمت",priceFont);
-        addLabeledSpinner(fieldEditorContainer,"تراز متن",align);
+        Button copy=btn("اعمال استایل این کادر برای همه");fieldEditorContainer.addView(copy);copy.setOnClickListener(v->{for(int i=0;i<fields.size();i++)if(i!=selectedField)copyStyleOnly(f,fields.get(i));designer.setFields(fields);designerChanged();});
+        Button del=btn("حذف این کادر");fieldEditorContainer.addView(del);del.setOnClickListener(v->{if(fields.size()<=1){Toast.makeText(this,"حداقل یک کادر باید باقی بماند",Toast.LENGTH_SHORT).show();return;}fields.remove(selectedField);selectedField=Math.min(selectedField,fields.size()-1);designer.setFields(fields);designer.select(selectedField);showFieldEditor();designerChanged();});
+    }
 
-        Button titleColorBtn = colorButton("رنگ عنوان",f.titleColor);
-        Button priceColorBtn = colorButton("رنگ قیمت",f.priceColor);
-        Button tomanColorBtn = colorButton("رنگ تومان",f.tomanColor);
-        Button bgColorBtn = colorButton("رنگ پس‌زمینه کادر",f.backgroundColor);
-        Button borderColorBtn = colorButton("رنگ حاشیه کادر",f.borderColor);
-
-        fieldEditorContainer.addView(titleColorBtn);
-        fieldEditorContainer.addView(priceColorBtn);
-        fieldEditorContainer.addView(tomanColorBtn);
-        fieldEditorContainer.addView(bgColorBtn);
-        fieldEditorContainer.addView(borderColorBtn);
-
-        final int[] titleColor = {f.titleColor};
-        final int[] priceColor = {f.priceColor};
-        final int[] tomanColor = {f.tomanColor};
-        final int[] bgColor = {f.backgroundColor};
-        final int[] borderColor = {f.borderColor};
-
-        titleColorBtn.setOnClickListener(v -> showColorPalette("رنگ عنوان",titleColor[0],c -> {
-            titleColor[0]=c;
-            refreshColorButton(titleColorBtn,"رنگ عنوان",c);
-        }));
-
-        priceColorBtn.setOnClickListener(v -> showColorPalette("رنگ قیمت",priceColor[0],c -> {
-            priceColor[0]=c;
-            refreshColorButton(priceColorBtn,"رنگ قیمت",c);
-        }));
-
-        tomanColorBtn.setOnClickListener(v -> showColorPalette("رنگ تومان",tomanColor[0],c -> {
-            tomanColor[0]=c;
-            refreshColorButton(tomanColorBtn,"رنگ تومان",c);
-        }));
-
-        bgColorBtn.setOnClickListener(v -> showColorPalette("رنگ پس‌زمینه کادر",bgColor[0],c -> {
-            bgColor[0]=c;
-            refreshColorButton(bgColorBtn,"رنگ پس‌زمینه کادر",c);
-        }));
-
-        borderColorBtn.setOnClickListener(v -> showColorPalette("رنگ حاشیه کادر",borderColor[0],c -> {
-            borderColor[0]=c;
-            refreshColorButton(borderColorBtn,"رنگ حاشیه کادر",c);
-        }));
-
-        EditText borderWidth = numberEdit(String.valueOf(f.borderWidth),"2");
-        EditText radius = numberEdit(String.valueOf(f.cornerRadius),"18");
-        EditText padH = numberEdit(String.valueOf(f.paddingHorizontal),"14");
-        EditText padV = numberEdit(String.valueOf(f.paddingVertical),"8");
-        EditText titleGap = numberEdit(String.valueOf(f.titlePriceGap),"3");
-
-        addLabeledEdit(fieldEditorContainer,"ضخامت حاشیه",borderWidth);
-        addLabeledEdit(fieldEditorContainer,"گردی گوشه‌ها",radius);
-        addLabeledEdit(fieldEditorContainer,"فاصله داخلی افقی",padH);
-        addLabeledEdit(fieldEditorContainer,"فاصله داخلی عمودی",padV);
-        addLabeledEdit(fieldEditorContainer,"فاصله عنوان تا قیمت",titleGap);
-
-        CheckBox strike = check("خط‌خورده کردن قیمت",f.strike);
-        CheckBox showToman = check("نمایش تومان",f.showToman);
-        CheckBox visible = check("نمایش کادر",f.visible);
-        CheckBox showTitle = check("نمایش عنوان",f.showTitle);
-        CheckBox showPrice = check("نمایش قیمت",f.showPrice);
-        CheckBox titleBold = check("عنوان Bold",f.titleBold);
-        CheckBox titleItalic = check("عنوان Italic",f.titleItalic);
-        CheckBox priceBold = check("قیمت Bold",f.priceBold);
-        CheckBox priceItalic = check("قیمت Italic",f.priceItalic);
-
-        fieldEditorContainer.addView(strike);
-        fieldEditorContainer.addView(showToman);
-        fieldEditorContainer.addView(visible);
-        fieldEditorContainer.addView(showTitle);
-        fieldEditorContainer.addView(showPrice);
-        fieldEditorContainer.addView(titleBold);
-        fieldEditorContainer.addView(titleItalic);
-        fieldEditorContainer.addView(priceBold);
-        fieldEditorContainer.addView(priceItalic);
-
-        Button apply = btn("اعمال تنظیمات این کادر");
-        fieldEditorContainer.addView(apply);
-
-        apply.setOnClickListener(v -> {
-            f.name = name.getText().toString().trim();
-            f.value = val.getText().toString().trim();
-
-            f.titleFont = FONT_VALUES[titleFont.getSelectedItemPosition()];
-            f.priceFont = FONT_VALUES[priceFont.getSelectedItemPosition()];
-            f.textAlign = align.getSelectedItemPosition();
-
-            f.titleColor = titleColor[0];
-            f.priceColor = priceColor[0];
-            f.tomanColor = tomanColor[0];
-            f.backgroundColor = bgColor[0];
-            f.borderColor = borderColor[0];
-
-            f.borderWidth = parseIntSafe(borderWidth,f.borderWidth,0,30);
-            f.cornerRadius = parseIntSafe(radius,f.cornerRadius,0,100);
-            f.paddingHorizontal = parseIntSafe(padH,f.paddingHorizontal,0,80);
-            f.paddingVertical = parseIntSafe(padV,f.paddingVertical,0,80);
-            f.titlePriceGap = parseIntSafe(titleGap,f.titlePriceGap,0,50);
-
-            f.strike = strike.isChecked();
-            f.showToman = showToman.isChecked();
-            f.visible = visible.isChecked();
-            f.showTitle = showTitle.isChecked();
-            f.showPrice = showPrice.isChecked();
-            f.titleBold = titleBold.isChecked();
-            f.titleItalic = titleItalic.isChecked();
-            f.priceBold = priceBold.isChecked();
-            f.priceItalic = priceItalic.isChecked();
-
-            designer.setFields(fields);
-            designer.select(selectedField);
-            selectedLabel.setText("در حال ویرایش: "+f.name);
-
-            saveTemplate();
-            Toast.makeText(this,"تنظیمات کادر اعمال شد",Toast.LENGTH_SHORT).show();
-        });
-
-        Button copyStyle = btn("اعمال استایل این کادر برای همه کادرها");
-        fieldEditorContainer.addView(copyStyle);
-
-        copyStyle.setOnClickListener(v -> {
-            for (int i=0;i<fields.size();i++){
-                if (i != selectedField) copyStyleOnly(f, fields.get(i));
-            }
-            designer.setFields(fields);
-            saveTemplate();
-            Toast.makeText(this,"استایل برای همه کادرها اعمال شد",Toast.LENGTH_SHORT).show();
-        });
-
-        Button del = btn("حذف این کادر");
-        fieldEditorContainer.addView(del);
-
-        del.setOnClickListener(v -> {
-            if (fields.size() <= 1){
-                Toast.makeText(this,"حداقل یک کادر باید باقی بماند",Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            fields.remove(selectedField);
-            relayoutFields();
-            selectedField = Math.min(selectedField,fields.size()-1);
-
-            designer.setFields(fields);
-            designer.select(selectedField);
-            showFieldEditor();
-            saveTemplate();
-        });
+    private abstract static class SimpleWatcher implements TextWatcher {
+        public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+        public void onTextChanged(CharSequence s,int start,int before,int count){}
     }
 
     private void showQuickTextSizeDialog(int fieldIndex, int textType){
@@ -925,70 +769,36 @@ public class MainActivity extends Activity {
     }
 
     private void showColorPalette(String title, int currentColor, final ColorSelectedListener listener){
-        final Dialog dialog = new Dialog(this);
+        final Dialog dialog=new Dialog(this);
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(24,18,24,18);
+        TextView cap=tv(title,18,true);cap.setGravity(Gravity.CENTER);root.addView(cap);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24,20,24,20);
+        final float[] hsv=new float[3];Color.colorToHSV(currentColor,hsv);final int[] chosen={currentColor};
+        TextView preview=new TextView(this);preview.setText("Preview   "+colorToHex(currentColor));preview.setGravity(Gravity.CENTER);preview.setTextSize(16);preview.setPadding(8,18,8,18);root.addView(preview);
+        ColorSvView sv=new ColorSvView(this,hsv[0],hsv[1],hsv[2]);root.addView(sv,new LinearLayout.LayoutParams(-1,(int)(180*getResources().getDisplayMetrics().density)));
+        SeekBar hue=new SeekBar(this);hue.setMax(360);hue.setProgress(Math.round(hsv[0]));root.addView(tv("Hue",13,true));root.addView(hue);
+        EditText hex=textEdit(colorToHex(currentColor),"#FFFFFFFF");addLabeledEdit(root,"HEX",hex);
 
-        TextView titleView = tv(title,18,true);
-        titleView.setGravity(Gravity.CENTER);
-        root.addView(titleView);
+        Runnable refresh=()->{chosen[0]=Color.HSVToColor(Color.alpha(currentColor),hsv);preview.setText("Preview   "+colorToHex(chosen[0]));GradientDrawable g=new GradientDrawable();g.setColor(chosen[0]);g.setCornerRadius(12);preview.setBackground(g);hex.setText(colorToHex(chosen[0]));};
+        sv.setListener((sat,val)->{hsv[1]=sat;hsv[2]=val;refresh.run();});
+        hue.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar b,int p,boolean f){hsv[0]=p;sv.setHue(p);refresh.run();}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
 
-        final int[] colors = {
-                0xFFFFFFFF,0xFFF5F5F5,0xFFE0E0E0,0xFF9E9E9E,0xFF616161,0xFF212121,
-                0xFFFFCDD2,0xFFEF5350,0xFFC62828,0xFF8E0000,
-                0xFFFFE0B2,0xFFFF9800,0xFFEF6C00,
-                0xFFFFF9C4,0xFFFFEB3B,0xFFF9A825,0xFFFFD600,
-                0xFFC8E6C9,0xFF66BB6A,0xFF2E7D32,0xFF1B5E20,
-                0xFFB2DFDB,0xFF26A69A,0xFF00796B,
-                0xFFBBDEFB,0xFF42A5F5,0xFF1976D2,0xFF0D47A1,
-                0xFFD1C4E9,0xFF7E57C2,0xFF512DA8,
-                0xFFF8BBD0,0xFFEC407A,0xFFC2185B,
-                0xFFFFF3E0,0xFFE3F2FD,0xFFE8F5E9,0xFFF3E5F5,
-                0xFFE91319,0xFF111111,0xFF63BF67
-        };
+        root.addView(tv("رنگ‌های آماده",13,true));GridLayout grid=new GridLayout(this);grid.setColumnCount(6);
+        int[] colors={0xFFFFFFFF,0xFFF5F5F5,0xFF9E9E9E,0xFF212121,0xFFFFD600,0xFFE91319,0xFF63BF67,0xFF1976D2,0xFF0D47A1,0xFF7E57C2,0xFFC2185B,0xFFFF9800,0xFF2E7D32,0xFF00796B,0xFF000000,0xFFB78D38,0xFF7041A6,0xFF2779BD};
+        int size=(int)(42*getResources().getDisplayMetrics().density),margin=(int)(3*getResources().getDisplayMetrics().density);
+        for(int c:colors){TextView box=new TextView(this);GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(9);g.setStroke(1,0xFFBDBDBD);box.setBackground(g);GridLayout.LayoutParams lp=new GridLayout.LayoutParams();lp.width=size;lp.height=size;lp.setMargins(margin,margin,margin,margin);box.setLayoutParams(lp);box.setOnClickListener(v->{Color.colorToHSV(c,hsv);hue.setProgress(Math.round(hsv[0]));sv.setHSV(hsv[0],hsv[1],hsv[2]);chosen[0]=c;refresh.run();});grid.addView(box);}root.addView(grid);
 
-        GridLayout grid = new GridLayout(this);
-        grid.setColumnCount(5);
+        LinearLayout buttons=row();Button cancel=btn("انصراف"),ok=btn("اعمال رنگ");buttons.addView(cancel,new LinearLayout.LayoutParams(0,-2,1));buttons.addView(ok,new LinearLayout.LayoutParams(0,-2,1));root.addView(buttons);
+        cancel.setOnClickListener(v->dialog.dismiss());ok.setOnClickListener(v->{try{String hs=hex.getText().toString().trim();if(hs.startsWith("#"))hs=hs.substring(1);long raw=Long.parseLong(hs,16);if(hs.length()==6)raw|=0xFF000000L;chosen[0]=(int)raw;}catch(Exception ignored){}listener.onColorSelected(chosen[0]);dialog.dismiss();});
+        refresh.run();dialog.setContentView(root);dialog.show();Window w=dialog.getWindow();if(w!=null)w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
 
-        int size = (int)(48*getResources().getDisplayMetrics().density);
-        int margin = (int)(4*getResources().getDisplayMetrics().density);
-
-        for (final int color : colors){
-            TextView box = new TextView(this);
-
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(color);
-            bg.setCornerRadius(12);
-            bg.setStroke(color == currentColor ? 5 : 2, color == currentColor ? 0xFF1976D2 : 0xFFBDBDBD);
-            box.setBackground(bg);
-
-            GridLayout.LayoutParams p = new GridLayout.LayoutParams();
-            p.width = size;
-            p.height = size;
-            p.setMargins(margin,margin,margin,margin);
-            box.setLayoutParams(p);
-
-            box.setOnClickListener(v -> {
-                listener.onColorSelected(color);
-                dialog.dismiss();
-            });
-
-            grid.addView(box);
-        }
-
-        root.addView(grid);
-
-        Button cancel = btn("انصراف");
-        root.addView(cancel);
-        cancel.setOnClickListener(v -> dialog.dismiss());
-
-        dialog.setContentView(root);
-        dialog.show();
-
-        Window w = dialog.getWindow();
-        if (w != null) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+    private static class ColorSvView extends View {
+        interface Listener{void onChanged(float saturation,float value);} private float hue,sat,val;private Listener listener;private Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        ColorSvView(Context c,float h,float s,float v){super(c);hue=h;sat=s;val=v;}
+        void setListener(Listener l){listener=l;} void setHue(float h){hue=h;invalidate();} void setHSV(float h,float s,float v){hue=h;sat=s;val=v;invalidate();}
+        @Override protected void onDraw(Canvas c){super.onDraw(c);int hc=Color.HSVToColor(new float[]{hue,1,1});Paint p=new Paint();p.setShader(new LinearGradient(0,0,getWidth(),0,Color.WHITE,hc,Shader.TileMode.CLAMP));c.drawRect(0,0,getWidth(),getHeight(),p);Paint shade=new Paint();shade.setShader(new LinearGradient(0,0,0,getHeight(),Color.TRANSPARENT,Color.BLACK,Shader.TileMode.CLAMP));c.drawRect(0,0,getWidth(),getHeight(),shade);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(4);paint.setColor(Color.WHITE);c.drawCircle(sat*getWidth(),(1-val)*getHeight(),12,paint);paint.setColor(Color.BLACK);paint.setStrokeWidth(2);c.drawCircle(sat*getWidth(),(1-val)*getHeight(),14,paint);}
+        @Override public boolean onTouchEvent(MotionEvent e){if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE){sat=Math.max(0,Math.min(1,e.getX()/Math.max(1f,getWidth())));val=1-Math.max(0,Math.min(1,e.getY()/Math.max(1f,getHeight())));invalidate();if(listener!=null)listener.onChanged(sat,val);return true;}return true;}
     }
 
     private void showOutput(){
@@ -997,7 +807,7 @@ public class MainActivity extends Activity {
 
         body.addView(section("خروجی"));
 
-        appendMode = check("لیبل بیرون تصویر قرار بگیرد",true);
+        appendMode = check("حالت قدیمی: لیبل بیرون تصویر قرار بگیرد",false);
         body.addView(appendMode);
 
         Button preview = btn("پیش‌نمایش خروجی نهایی");
@@ -1045,7 +855,7 @@ public class MainActivity extends Activity {
             r.cropBottom = 1f;
         }
 
-        boolean append = appendMode == null || appendMode.isChecked();
+        boolean append = appendMode != null && appendMode.isChecked();
         return r.renderFinal(src,Color.WHITE,0xFFD8D8D8,append,settingLabelWidth);
     }
 
@@ -1132,6 +942,19 @@ public class MainActivity extends Activity {
                 folderUri = u;
                 status.setText("پوشه تصاویر انتخاب شد");
                 Toast.makeText(this,"پوشه عکس محصولات انتخاب شد",Toast.LENGTH_SHORT).show();
+            } else if (req == PICK_BACKGROUND){
+                settingCustomBackgroundUri = u.toString();
+                try (InputStream in = getContentResolver().openInputStream(u)){
+                    customBackgroundBitmap = BitmapFactory.decodeStream(in);
+                }
+                settingBackgroundMode = LabelDesignerView.BG_IMAGE;
+                if (designer != null){
+                    designer.setCustomBackgroundBitmap(customBackgroundBitmap);
+                    designer.backgroundMode = settingBackgroundMode;
+                    designer.invalidate();
+                }
+                saveDesignerSettings();
+                status.setText("Background دلخواه انتخاب شد");
             }
 
         } catch (Exception e){
@@ -1440,95 +1263,44 @@ public class MainActivity extends Activity {
     }
 
     private void applyDesignerSettingsToView(LabelDesignerView d){
-        if (d == null) return;
-
-        d.labelWidthPct = settingLabelWidth;
-        d.fieldGapPct = settingFieldGap;
-        d.outerTagRadius = settingOuterRadius;
-        d.outerTagBorderWidth = settingOuterBorderWidth;
-        d.outerTagColor = settingOuterColor;
-        d.outerTagBorderColor = settingOuterBorderColor;
-        d.autoHeight = settingAutoHeight;
-
-        d.productX = settingProductX;
-        d.productY = settingProductY;
-        d.productW = settingProductW;
-        d.productH = settingProductH;
-
-        d.cropEnabled = settingCropEnabled;
-        d.cropLeft = settingCropLeft;
-        d.cropTop = settingCropTop;
-        d.cropRight = settingCropRight;
-        d.cropBottom = settingCropBottom;
+        if(d==null)return;
+        d.labelWidthPct=settingLabelWidth; d.labelX=settingLabelX; d.labelY=settingLabelY;
+        d.fieldGapPct=settingFieldGap; d.fieldGapPx=settingFieldGapPx; d.panelPaddingPx=settingPanelPaddingPx;
+        d.outerTagRadius=settingOuterRadius; d.outerTagBorderWidth=settingOuterBorderWidth; d.outerTagColor=settingOuterColor; d.outerTagBorderColor=settingOuterBorderColor; d.autoHeight=settingAutoHeight;
+        d.productX=settingProductX; d.productY=settingProductY; d.productW=settingProductW; d.productH=settingProductH; d.productZoom=settingProductZoom;
+        d.cropEnabled=settingCropEnabled; d.cropLeft=settingCropLeft; d.cropTop=settingCropTop; d.cropRight=settingCropRight; d.cropBottom=settingCropBottom;
+        d.backgroundMode=settingBackgroundMode; d.canvasBackground=settingBackgroundColor; d.gradientColor1=settingGradientColor1; d.gradientColor2=settingGradientColor2; d.gradientAngle=settingGradientAngle; d.backgroundAlpha=settingBackgroundAlpha; d.patternIndex=settingPatternIndex; d.setCustomBackgroundBitmap(customBackgroundBitmap);
     }
 
     private void syncDesignerSettingsFromView(){
-        if (designer == null) return;
-
-        settingLabelWidth = designer.labelWidthPct;
-        settingFieldGap = designer.fieldGapPct;
-        settingOuterRadius = designer.outerTagRadius;
-        settingOuterBorderWidth = designer.outerTagBorderWidth;
-        settingOuterColor = designer.outerTagColor;
-        settingOuterBorderColor = designer.outerTagBorderColor;
-        settingAutoHeight = designer.autoHeight;
-
-        settingProductX = designer.productX;
-        settingProductY = designer.productY;
-        settingProductW = designer.productW;
-        settingProductH = designer.productH;
-
-        settingCropEnabled = designer.cropEnabled;
-        settingCropLeft = designer.cropLeft;
-        settingCropTop = designer.cropTop;
-        settingCropRight = designer.cropRight;
-        settingCropBottom = designer.cropBottom;
+        if(designer==null)return;
+        settingLabelWidth=designer.labelWidthPct; settingLabelX=designer.labelX; settingLabelY=designer.labelY; settingFieldGap=designer.fieldGapPct; settingFieldGapPx=designer.fieldGapPx; settingPanelPaddingPx=designer.panelPaddingPx;
+        settingOuterRadius=designer.outerTagRadius; settingOuterBorderWidth=designer.outerTagBorderWidth; settingOuterColor=designer.outerTagColor; settingOuterBorderColor=designer.outerTagBorderColor; settingAutoHeight=designer.autoHeight;
+        settingProductX=designer.productX; settingProductY=designer.productY; settingProductW=designer.productW; settingProductH=designer.productH; settingProductZoom=designer.productZoom;
+        settingCropEnabled=designer.cropEnabled; settingCropLeft=designer.cropLeft; settingCropTop=designer.cropTop; settingCropRight=designer.cropRight; settingCropBottom=designer.cropBottom;
+        settingBackgroundMode=designer.backgroundMode; settingBackgroundColor=designer.canvasBackground; settingGradientColor1=designer.gradientColor1; settingGradientColor2=designer.gradientColor2; settingGradientAngle=designer.gradientAngle; settingBackgroundAlpha=designer.backgroundAlpha; settingPatternIndex=designer.patternIndex;
     }
 
     private void saveDesignerSettings(){
         getSharedPreferences("javdan",MODE_PRIVATE).edit()
-                .putFloat("labelWidth",settingLabelWidth)
-                .putFloat("fieldGap",settingFieldGap)
-                .putInt("outerRadius",settingOuterRadius)
-                .putInt("outerBorderWidth",settingOuterBorderWidth)
-                .putInt("outerColor",settingOuterColor)
-                .putInt("outerBorderColor",settingOuterBorderColor)
-                .putBoolean("autoHeight",settingAutoHeight)
-
-                .putFloat("productX",settingProductX)
-                .putFloat("productY",settingProductY)
-                .putFloat("productW",settingProductW)
-                .putFloat("productH",settingProductH)
-
-                .putBoolean("cropEnabled",settingCropEnabled)
-                .putFloat("cropLeft",settingCropLeft)
-                .putFloat("cropTop",settingCropTop)
-                .putFloat("cropRight",settingCropRight)
-                .putFloat("cropBottom",settingCropBottom)
+                .putFloat("labelWidth",settingLabelWidth).putFloat("labelX",settingLabelX).putFloat("labelY",settingLabelY)
+                .putFloat("fieldGap",settingFieldGap).putFloat("fieldGapPx",settingFieldGapPx).putFloat("panelPaddingPx",settingPanelPaddingPx)
+                .putInt("outerRadius",settingOuterRadius).putInt("outerBorderWidth",settingOuterBorderWidth).putInt("outerColor",settingOuterColor).putInt("outerBorderColor",settingOuterBorderColor).putBoolean("autoHeight",settingAutoHeight)
+                .putFloat("productX",settingProductX).putFloat("productY",settingProductY).putFloat("productW",settingProductW).putFloat("productH",settingProductH).putFloat("productZoom",settingProductZoom)
+                .putBoolean("cropEnabled",settingCropEnabled).putFloat("cropLeft",settingCropLeft).putFloat("cropTop",settingCropTop).putFloat("cropRight",settingCropRight).putFloat("cropBottom",settingCropBottom)
+                .putInt("backgroundMode",settingBackgroundMode).putInt("backgroundColor",settingBackgroundColor).putInt("gradientColor1",settingGradientColor1).putInt("gradientColor2",settingGradientColor2).putFloat("gradientAngle",settingGradientAngle).putInt("backgroundAlpha",settingBackgroundAlpha).putInt("patternIndex",settingPatternIndex).putString("customBackgroundUri",settingCustomBackgroundUri)
                 .apply();
     }
 
     private void loadDesignerSettings(){
-        android.content.SharedPreferences p = getSharedPreferences("javdan",MODE_PRIVATE);
-
-        settingLabelWidth = p.getFloat("labelWidth",0.28f);
-        settingFieldGap = p.getFloat("fieldGap",0.014f);
-        settingOuterRadius = p.getInt("outerRadius",22);
-        settingOuterBorderWidth = p.getInt("outerBorderWidth",3);
-        settingOuterColor = p.getInt("outerColor",0xFF181818);
-        settingOuterBorderColor = p.getInt("outerBorderColor",0xFF3A3A3A);
-        settingAutoHeight = p.getBoolean("autoHeight",true);
-
-        settingProductX = p.getFloat("productX",0.02f);
-        settingProductY = p.getFloat("productY",0.08f);
-        settingProductW = p.getFloat("productW",0.62f);
-        settingProductH = p.getFloat("productH",0.84f);
-
-        settingCropEnabled = p.getBoolean("cropEnabled",false);
-        settingCropLeft = p.getFloat("cropLeft",0f);
-        settingCropTop = p.getFloat("cropTop",0f);
-        settingCropRight = p.getFloat("cropRight",1f);
-        settingCropBottom = p.getFloat("cropBottom",1f);
+        android.content.SharedPreferences p=getSharedPreferences("javdan",MODE_PRIVATE);
+        settingLabelWidth=p.getFloat("labelWidth",0.28f); settingLabelX=p.getFloat("labelX",0.70f); settingLabelY=p.getFloat("labelY",0.12f);
+        settingFieldGap=p.getFloat("fieldGap",0.006f); settingFieldGapPx=p.getFloat("fieldGapPx",6f); settingPanelPaddingPx=p.getFloat("panelPaddingPx",10f);
+        settingOuterRadius=p.getInt("outerRadius",22); settingOuterBorderWidth=p.getInt("outerBorderWidth",3); settingOuterColor=p.getInt("outerColor",0xFF181818); settingOuterBorderColor=p.getInt("outerBorderColor",0xFF3A3A3A); settingAutoHeight=p.getBoolean("autoHeight",true);
+        settingProductX=p.getFloat("productX",0.02f); settingProductY=p.getFloat("productY",0.08f); settingProductW=p.getFloat("productW",0.62f); settingProductH=p.getFloat("productH",0.84f); settingProductZoom=p.getFloat("productZoom",1f);
+        settingCropEnabled=p.getBoolean("cropEnabled",false); settingCropLeft=p.getFloat("cropLeft",0f); settingCropTop=p.getFloat("cropTop",0f); settingCropRight=p.getFloat("cropRight",1f); settingCropBottom=p.getFloat("cropBottom",1f);
+        settingBackgroundMode=p.getInt("backgroundMode",LabelDesignerView.BG_SOLID); settingBackgroundColor=p.getInt("backgroundColor",0xFFF2F2F2); settingGradientColor1=p.getInt("gradientColor1",0xFFFFFFFF); settingGradientColor2=p.getInt("gradientColor2",0xFFE8EEF8); settingGradientAngle=p.getFloat("gradientAngle",0f); settingBackgroundAlpha=p.getInt("backgroundAlpha",255); settingPatternIndex=p.getInt("patternIndex",0); settingCustomBackgroundUri=p.getString("customBackgroundUri","");
+        if(settingCustomBackgroundUri!=null&&!settingCustomBackgroundUri.isEmpty())try(InputStream in=getContentResolver().openInputStream(Uri.parse(settingCustomBackgroundUri))){customBackgroundBitmap=BitmapFactory.decodeStream(in);}catch(Exception ignored){}
     }
 
     private void saveTemplate(){
