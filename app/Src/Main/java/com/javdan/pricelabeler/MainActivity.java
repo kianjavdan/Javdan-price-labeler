@@ -328,11 +328,22 @@ public class MainActivity extends Activity {
         body.addView(designer,new LinearLayout.LayoutParams(-1,900));
 
         designer.setListener(new LabelDesignerView.Listener(){
+            @Override
             public void onFieldSelected(int i){
                 selectedField=i;
                 showFieldEditor();
             }
-            public void onChanged(){ saveTemplate(); }
+
+            @Override
+            public void onChanged(){
+                saveTemplate();
+            }
+
+            @Override
+            public void onTextClicked(int fieldIndex,int part){
+                selectedField=fieldIndex;
+                showFontSizeDialog(fieldIndex,part);
+            }
         });
 
         body.addView(section("تنظیمات کلی خروجی"));
@@ -415,6 +426,110 @@ public class MainActivity extends Activity {
             if(selectedField<0||selectedField>=fields.size())selectedField=0;
             designer.select(selectedField);
             showFieldEditor();
+        }
+    }
+
+    private void showFontSizeDialog(int fieldIndex,int part){
+        if(fieldIndex<0||fieldIndex>=fields.size())return;
+
+        LabelField f=fields.get(fieldIndex);
+        final Dialog dialog=new Dialog(this);
+
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(30,25,30,25);
+
+        String title;
+        int current;
+
+        if(part==0){
+            title="اندازه فونت عنوان";
+            current=f.titleSize;
+        }else if(part==2){
+            title="اندازه فونت تومان";
+            current=f.tomanSize;
+        }else{
+            title="اندازه فونت قیمت";
+            current=f.priceSize;
+        }
+
+        TextView titleView=tv(title,18,true);
+        titleView.setGravity(Gravity.CENTER);
+        root.addView(titleView);
+
+        LinearLayout sizeRow=row();
+
+        Button minus=btn("−");
+        Button plus=btn("+");
+        EditText value=numberEdit(String.valueOf(current),"سایز");
+        value.setGravity(Gravity.CENTER);
+
+        sizeRow.addView(minus,new LinearLayout.LayoutParams(0,-2,1));
+        sizeRow.addView(value,new LinearLayout.LayoutParams(0,-2,1.5f));
+        sizeRow.addView(plus,new LinearLayout.LayoutParams(0,-2,1));
+
+        root.addView(sizeRow);
+
+        final int fallback=current;
+
+        Runnable applySize=()->{
+            int newSize=parseIntText(value,fallback);
+            newSize=clampInt(newSize,8,140);
+            value.setText(String.valueOf(newSize));
+
+            if(part==0){
+                f.titleSize=newSize;
+            }else if(part==2){
+                f.tomanSize=newSize;
+            }else{
+                f.priceSize=newSize;
+            }
+
+            if(designer!=null)designer.invalidate();
+            saveTemplate();
+        };
+
+        minus.setOnClickListener(v->{
+            int n=parseIntText(value,fallback);
+            value.setText(String.valueOf(Math.max(8,n-1)));
+            applySize.run();
+        });
+
+        plus.setOnClickListener(v->{
+            int n=parseIntText(value,fallback);
+            value.setText(String.valueOf(Math.min(140,n+1)));
+            applySize.run();
+        });
+
+        Button apply=btn("اعمال");
+        root.addView(apply);
+        apply.setOnClickListener(v->{
+            applySize.run();
+            dialog.dismiss();
+            if(fieldEditorContainer!=null)showFieldEditor();
+        });
+
+        Button cancel=btn("انصراف");
+        root.addView(cancel);
+        cancel.setOnClickListener(v->dialog.dismiss());
+
+        dialog.setContentView(root);
+        dialog.show();
+
+        Window w=dialog.getWindow();
+        if(w!=null){
+            w.setLayout(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+        }
+    }
+
+    private int parseIntText(EditText edit,int fallback){
+        try{
+            return Integer.parseInt(edit.getText().toString().trim());
+        }catch(Exception e){
+            return fallback;
         }
     }
 
