@@ -6,6 +6,7 @@ import android.content.*;
 import android.database.Cursor;
 import android.graphics.*;
 import android.graphics.drawable.GradientDrawable;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.provider.*;
 import android.text.InputType;
@@ -22,13 +23,13 @@ import java.util.*;
 
 public class MainActivity extends Activity {
 
-    static final int PICK_EXCEL = 10, PICK_IMAGE = 11, PICK_FOLDER = 12, PICK_BACKGROUND = 13;
+    static final int PICK_EXCEL = 10, PICK_IMAGE = 11, PICK_FOLDER = 12, PICK_BACKGROUND = 13, TAKE_PHOTO = 14;
 
     LinearLayout body, manualRows, excelInfo, fieldEditorContainer;
     Button tabData, tabDesigner, tabOutput;
     RadioButton modeExcel, modeManual;
 
-    Uri excelUri, imageUri, folderUri;
+    Uri excelUri, imageUri, folderUri, cameraImageUri;
     Bitmap currentBitmap;
     LabelDesignerView designer;
 
@@ -330,9 +331,13 @@ public class MainActivity extends Activity {
         } else {
             body.addView(section("حالت دستی"));
 
-            Button pi = btn("انتخاب عکس از گالری یا Files");
+            Button pi = btn("افزودن عکس محصول");
             body.addView(pi);
-            pi.setOnClickListener(v -> pickFile("image/*", PICK_IMAGE));
+            pi.setOnClickListener(v -> showImageSourceChooser());
+
+            TextView imageHint = tv("می‌توانید عکس را از گالری/Files انتخاب کنید یا همان لحظه با دوربین بگیرید.",12,false);
+            imageHint.setTextColor(0xFF666666);
+            body.addView(imageHint);
 
             rialToToman = new CheckBox(this);
             rialToToman.setText("قیمت‌های واردشده ریال هستند؛ تبدیل به تومان ÷۱۰");
@@ -602,7 +607,7 @@ public class MainActivity extends Activity {
             designerChanged();
         });
 
-        Button sample=btn("انتخاب / تغییر عکس نمونه");prod.addView(sample);sample.setOnClickListener(v->pickFile("image/*",PICK_IMAGE));
+        Button sample=btn("انتخاب / تغییر عکس نمونه");prod.addView(sample);sample.setOnClickListener(v->showImageSourceChooser());
 
         // MAIN PANEL
         LinearLayout panelAcc=accordion("قاب اصلی لیبل",false);body.addView(panelAcc);LinearLayout panel=accordionContent(panelAcc);
@@ -976,6 +981,79 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showImageSourceChooser(){
+        String[] items = {"انتخاب از گالری / Files", "گرفتن عکس با دوربین"};
+        new AlertDialog.Builder(this)
+                .setTitle("افزودن عکس محصول")
+                .setItems(items,(dialog,which)->{
+                    if (which == 0) pickFile("image/*",PICK_IMAGE);
+                    else launchCamera();
+                })
+                .setNegativeButton("انصراف",null)
+                .show();
+    }
+
+    private void launchCamera(){
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME,"Javdan_camera_"+System.currentTimeMillis()+".jpg");
+            values.put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
+                values.put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/JavdanPriceLabeler/Camera");
+                values.put(MediaStore.Images.Media.IS_PENDING,1);
+            }
+
+            cameraImageUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);
+            if (cameraImageUri == null) throw new IOException("امکان ساخت فایل عکس دوربین وجود ندارد");
+
+            Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            camera.putExtra(MediaStore.EXTRA_OUTPUT,cameraImageUri);
+            camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            camera.setClipData(ClipData.newRawUri("Javdan camera output",cameraImageUri));
+
+            if (camera.resolveActivity(getPackageManager()) == null){
+                getContentResolver().delete(cameraImageUri,null,null);
+                cameraImageUri = null;
+                throw new ActivityNotFoundException("برنامه دوربین پیدا نشد");
+            }
+            startActivityForResult(camera,TAKE_PHOTO);
+        } catch (Exception e){
+            Toast.makeText(this,"خطا در باز کردن دوربین: "+safeMessage(e),Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private Bitmap loadBitmapFromUri(Uri u) throws Exception {
+        Bitmap bmp;
+        try (InputStream in = getContentResolver().openInputStream(u)){
+            bmp = BitmapFactory.decodeStream(in);
+        }
+        if (bmp == null) throw new IOException("تصویر قابل خواندن نیست");
+
+        int orientation = ExifInterface.ORIENTATION_NORMAL;
+        try (InputStream exifIn = getContentResolver().openInputStream(u)){
+            if (exifIn != null){
+                ExifInterface exif = new ExifInterface(exifIn);
+                orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_NORMAL);
+            }
+        } catch (Exception ignored){}
+
+        Matrix m = new Matrix();
+        if (orientation == ExifInterface.ORIENTATION_ROTATE_90) m.postRotate(90);
+        else if (orientation == ExifInterface.ORIENTATION_ROTATE_180) m.postRotate(180);
+        else if (orientation == ExifInterface.ORIENTATION_ROTATE_270) m.postRotate(270);
+        else if (orientation == ExifInterface.ORIENTATION_FLIP_HORIZONTAL) m.postScale(-1,1);
+        else if (orientation == ExifInterface.ORIENTATION_FLIP_VERTICAL) m.postScale(1,-1);
+        else if (orientation == ExifInterface.ORIENTATION_TRANSPOSE){ m.postRotate(90); m.postScale(-1,1); }
+        else if (orientation == ExifInterface.ORIENTATION_TRANSVERSE){ m.postRotate(270); m.postScale(-1,1); }
+
+        if (!m.isIdentity()){
+            Bitmap rotated = Bitmap.createBitmap(bmp,0,0,bmp.getWidth(),bmp.getHeight(),m,true);
+            if (rotated != bmp) bmp.recycle();
+            bmp = rotated;
+        }
+        return bmp;
+    }
+
     private void pickFile(String type, int request){
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -993,6 +1071,34 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int result, Intent data){
         super.onActivityResult(req,result,data);
+
+        // Camera apps normally return null Intent data when EXTRA_OUTPUT is used.
+        // Handle the camera result before the generic data-null guard.
+        if (req == TAKE_PHOTO){
+            if (result == RESULT_OK && cameraImageUri != null){
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
+                        ContentValues done = new ContentValues();
+                        done.put(MediaStore.Images.Media.IS_PENDING,0);
+                        getContentResolver().update(cameraImageUri,done,null,null);
+                    }
+                    imageUri = cameraImageUri;
+                    currentBitmap = loadBitmapFromUri(imageUri);
+                    status.setText("عکس با دوربین گرفته شد");
+                    if (designer != null) designer.setProductBitmap(currentBitmap);
+                    cameraImageUri = null;
+                } catch (Exception e){
+                    Toast.makeText(this,"خطا در خواندن عکس دوربین: "+safeMessage(e),Toast.LENGTH_LONG).show();
+                }
+            } else {
+                if (cameraImageUri != null){
+                    try { getContentResolver().delete(cameraImageUri,null,null); } catch (Exception ignored){}
+                    cameraImageUri = null;
+                }
+            }
+            return;
+        }
+
         if (result != RESULT_OK || data == null) return;
 
         Uri u = data.getData();
@@ -1006,9 +1112,7 @@ public class MainActivity extends Activity {
             if (req == PICK_IMAGE){
                 imageUri = u;
 
-                try (InputStream in = getContentResolver().openInputStream(u)){
-                    currentBitmap = BitmapFactory.decodeStream(in);
-                }
+                currentBitmap = loadBitmapFromUri(u);
 
                 status.setText("عکس انتخاب شد");
                 if (designer != null) designer.setProductBitmap(currentBitmap);
