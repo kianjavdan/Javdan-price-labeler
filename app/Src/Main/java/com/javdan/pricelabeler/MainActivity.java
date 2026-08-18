@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
 
     Uri excelUri, imageUri, folderUri, cameraImageUri;
     String cameraTempPath = "";
+    String pendingCameraUriString = "";
     Bitmap currentBitmap;
     LabelDesignerView designer;
 
@@ -101,8 +102,17 @@ public class MainActivity extends Activity {
         // this survives OEM camera quirks and Activity recreation.
         cameraTempPath = getSharedPreferences("javdan_camera", MODE_PRIVATE)
                 .getString("pending_camera_path", "");
-        if (b != null) cameraTempPath = b.getString("pending_camera_path", cameraTempPath);
-        restoreCameraUriFromPath();
+        pendingCameraUriString = getSharedPreferences("javdan_camera", MODE_PRIVATE)
+                .getString("pending_camera_uri", "");
+        if (b != null) {
+            cameraTempPath = b.getString("pending_camera_path", cameraTempPath);
+            pendingCameraUriString = b.getString("pending_camera_uri", pendingCameraUriString);
+        }
+        if (pendingCameraUriString != null && !pendingCameraUriString.isEmpty()) {
+            try { cameraImageUri = Uri.parse(pendingCameraUriString); } catch (Exception ignored) {}
+        } else {
+            restoreCameraUriFromPath();
+        }
 
         loadTemplate();
         loadDesignerSettings();
@@ -115,6 +125,9 @@ public class MainActivity extends Activity {
         super.onSaveInstanceState(outState);
         if (cameraTempPath != null && !cameraTempPath.isEmpty()) {
             outState.putString("pending_camera_path", cameraTempPath);
+        }
+        if (cameraImageUri != null) {
+            outState.putString("pending_camera_uri", cameraImageUri.toString());
         }
     }
 
@@ -1012,16 +1025,24 @@ public class MainActivity extends Activity {
 
     private void launchCamera(){
         try {
-            File dir = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "camera_capture");
-            if (!dir.exists() && !dir.mkdirs()) throw new IOException("ساخت پوشه دوربین ناموفق بود");
+            String name = "Javdan_camera_" + System.currentTimeMillis() + ".jpg";
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JavdanPriceLabeler/Camera");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+            }
 
-            File photo = File.createTempFile("Javdan_camera_", ".jpg", dir);
-            cameraTempPath = photo.getAbsolutePath();
-            cameraImageUri = CameraFileProvider.uriForFile(this, photo);
+            cameraImageUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (cameraImageUri == null) throw new IOException("ساخت فایل MediaStore برای دوربین ناموفق بود");
+            pendingCameraUriString = cameraImageUri.toString();
+            cameraTempPath = "";
 
-            // Persist the real file path before leaving our Activity.
             getSharedPreferences("javdan_camera", MODE_PRIVATE).edit()
-                    .putString("pending_camera_path", cameraTempPath).apply();
+                    .putString("pending_camera_uri", pendingCameraUriString)
+                    .remove("pending_camera_path")
+                    .apply();
 
             Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             camera.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
@@ -1035,7 +1056,7 @@ public class MainActivity extends Activity {
             }
 
             if (camera.resolveActivity(getPackageManager()) == null){
-                photo.delete();
+                try { getContentResolver().delete(cameraImageUri, null, null); } catch (Exception ignored) {}
                 clearPendingCamera();
                 throw new ActivityNotFoundException("برنامه دوربین پیدا نشد");
             }
@@ -1144,9 +1165,82 @@ public class MainActivity extends Activity {
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (Exception ignored) {}
         cameraImageUri = null;
+        pendingCameraUriString = "";
         cameraTempPath = "";
         getSharedPreferences("javdan_camera", MODE_PRIVATE).edit()
                 .remove("pending_camera_path").remove("pending_camera_uri").apply();
+    }
+
+    private Uri pendingCameraUri(){
+        if (cameraImageUri != null) return cameraImageUri;
+        String s = pendingCameraUriString;
+        if (s == null || s.isEmpty()) {
+            s = getSharedPreferences("javdan_camera", MODE_PRIVATE)
+                    .getString("pending_camera_uri", "");
+        }
+        if (s == null || s.isEmpty()) return null;
+        try {
+            cameraImageUri = Uri.parse(s);
+            pendingCameraUriString = s;
+            return cameraImageUri;
+        } catch (Exception e){
+            return null;
+        }
+    }
+
+    private long contentUriSize(Uri uri){
+        if (uri == null) return -1L;
+        Cursor c = null;
+        try {
+            c = getContentResolver().query(uri, new String[]{OpenableColumns.SIZE}, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                int ix = c.getColumnIndex(OpenableColumns.SIZE);
+                if (ix >= 0 && !c.isNull(ix)) return c.getLong(ix);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        try (AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(uri, "r")) {
+            if (afd != null && afd.getLength() >= 0) return afd.getLength();
+        } catch (Exception ignored) {}
+        return -1L;
+    }
+
+    private void finalizePendingMediaStoreUri(Uri uri){
+        if (uri == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        try {
+            ContentValues done = new ContentValues();
+            done.put(MediaStore.Images.Media.IS_PENDING, 0);
+            getContentResolver().update(uri, done, null, null);
+        } catch (Exception ignored) {}
+    }
+
+    private boolean importCameraUri(Uri uri){
+        if (uri == null) return false;
+        try {
+            Bitmap captured = loadBitmapFromUri(uri);
+            if (captured == null || captured.getWidth() <= 1 || captured.getHeight() <= 1) return false;
+            finalizePendingMediaStoreUri(uri);
+            currentBitmap = captured;
+            imageUri = uri;
+            cameraImageUri = uri;
+            pendingCameraUriString = uri.toString();
+
+            if (status != null) status.setText("عکس دوربین وارد شد");
+            if (previewStatus != null) previewStatus.setText("عکس دوربین آماده پیش‌نمایش است.");
+            if (designer != null) {
+                designer.setProductBitmap(currentBitmap);
+                designer.requestLayout();
+                designer.invalidate();
+            }
+            getSharedPreferences("javdan_camera", MODE_PRIVATE).edit()
+                    .remove("pending_camera_path").remove("pending_camera_uri").apply();
+            Toast.makeText(this,"عکس دوربین با موفقیت وارد شد",Toast.LENGTH_SHORT).show();
+            return true;
+        } catch (Exception e){
+            return false;
+        }
     }
 
     private boolean importCameraPhoto(File photo){
@@ -1182,49 +1276,54 @@ public class MainActivity extends Activity {
 
 
     private void handleCameraResult(final Intent data, final int resultCode, final int attempt){
-        final File pending = pendingCameraFile();
+        final Uri pendingUri = pendingCameraUri();
 
-        // Preferred path: full-resolution JPEG written to our provider file.
-        if (pending != null && pending.exists() && pending.length() > 256){
-            if (!importCameraPhoto(pending)) {
-                Toast.makeText(this,"عکس ثبت شد ولی فایل قابل خواندن نبود",Toast.LENGTH_LONG).show();
+        // Preferred path: the system camera writes directly into a MediaStore Uri.
+        if (pendingUri != null) {
+            long size = contentUriSize(pendingUri);
+            if (size > 256) {
+                if (importCameraUri(pendingUri)) return;
             }
-            return;
         }
 
-        // Samsung and some OEM camera apps can close their Activity before the output stream is
-        // fully flushed. Give the provider file a short grace period before using fallbacks.
-        if (attempt < 10){
+        // OEM camera apps may return before MediaStore has published the JPEG bytes.
+        if (attempt < 15){
             new Handler(Looper.getMainLooper()).postDelayed(new Runnable(){
                 @Override public void run(){
                     handleCameraResult(data, resultCode, attempt + 1);
                 }
-            }, 180L);
+            }, 200L);
             return;
         }
 
-        // Fallback 1: some cameras return a readable Uri even when EXTRA_OUTPUT was ignored.
+        // Fallback 1: some camera apps ignore EXTRA_OUTPUT and return another content Uri.
         try {
             if (data != null && data.getData() != null){
-                Bitmap returned = loadBitmapFromUri(data.getData());
+                Uri returnedUri = data.getData();
+                Bitmap returned = loadBitmapFromUri(returnedUri);
                 if (returned != null && returned.getWidth() > 1 && returned.getHeight() > 1){
-                    if (saveFallbackCameraBitmap(returned, pending)) return;
-                    applyCameraBitmap(returned, data.getData());
+                    if (pendingUri != null && pendingUri.equals(returnedUri)) {
+                        if (importCameraUri(returnedUri)) return;
+                    }
+                    applyCameraBitmap(returned, returnedUri);
+                    finalizePendingMediaStoreUri(returnedUri);
                     return;
                 }
             }
         } catch (Exception ignored) {}
 
-        // Fallback 2: legacy/OEM ACTION_IMAGE_CAPTURE implementations return a Bitmap under
-        // extras["data"]. It is usually a thumbnail, but is much better than dropping the photo.
+        // Fallback 2: legacy cameras sometimes return only a thumbnail Bitmap.
         try {
             if (data != null && data.getExtras() != null){
                 Object o = data.getExtras().get("data");
                 if (o instanceof Bitmap){
                     Bitmap thumb = (Bitmap)o;
                     if (thumb.getWidth() > 1 && thumb.getHeight() > 1){
-                        if (saveFallbackCameraBitmap(thumb, pending)) return;
                         applyCameraBitmap(thumb, null);
+                        if (pendingUri != null) {
+                            try { getContentResolver().delete(pendingUri, null, null); } catch (Exception ignored) {}
+                        }
+                        clearPendingCamera();
                         Toast.makeText(this,"دوربین فقط نسخه کم‌حجم عکس را برگرداند",Toast.LENGTH_LONG).show();
                         return;
                     }
@@ -1232,9 +1331,13 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {}
 
-        long bytes = (pending != null && pending.exists()) ? pending.length() : -1L;
+        long bytes = contentUriSize(pendingUri);
+        if (pendingUri != null) {
+            try { getContentResolver().delete(pendingUri, null, null); } catch (Exception ignored) {}
+        }
+        clearPendingCamera();
         Toast.makeText(this,
-                "عکس از دوربین دریافت نشد (حجم فایل: " + bytes + " بایت). لطفاً دوباره امتحان کنید.",
+                "عکس از دوربین دریافت نشد (MediaStore: " + bytes + " بایت).",
                 Toast.LENGTH_LONG).show();
     }
 
