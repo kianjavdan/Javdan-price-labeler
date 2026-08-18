@@ -95,10 +95,28 @@ public class MainActivity extends Activity {
     public void onCreate(Bundle b){
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.WHITE);
+
+        // Restore a pending full-resolution camera Uri. Some camera apps may
+        // recreate MainActivity while they are in the foreground.
+        String pendingCamera = getSharedPreferences("javdan_camera", MODE_PRIVATE)
+                .getString("pending_camera_uri", "");
+        if (b != null) pendingCamera = b.getString("pending_camera_uri", pendingCamera);
+        if (pendingCamera != null && !pendingCamera.isEmpty()) {
+            try { cameraImageUri = Uri.parse(pendingCamera); } catch (Exception ignored) {}
+        }
+
         loadTemplate();
         loadDesignerSettings();
         buildUi();
         showData();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState){
+        super.onSaveInstanceState(outState);
+        if (cameraImageUri != null) {
+            outState.putString("pending_camera_uri", cameraImageUri.toString());
+        }
     }
 
     private TextView tv(String s, int sp, boolean bold){
@@ -1006,6 +1024,11 @@ public class MainActivity extends Activity {
             cameraImageUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);
             if (cameraImageUri == null) throw new IOException("امکان ساخت فایل عکس دوربین وجود ندارد");
 
+            // Persist before launching the external camera Activity. This survives
+            // Activity recreation / process pressure on Samsung and other devices.
+            getSharedPreferences("javdan_camera", MODE_PRIVATE).edit()
+                    .putString("pending_camera_uri", cameraImageUri.toString()).apply();
+
             Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             camera.putExtra(MediaStore.EXTRA_OUTPUT,cameraImageUri);
             camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1068,33 +1091,91 @@ public class MainActivity extends Activity {
         startActivityForResult(i,PICK_FOLDER);
     }
 
+    private Uri restorePendingCameraUri(){
+        if (cameraImageUri != null) return cameraImageUri;
+        String saved = getSharedPreferences("javdan_camera", MODE_PRIVATE)
+                .getString("pending_camera_uri", "");
+        if (saved == null || saved.isEmpty()) return null;
+        try { return Uri.parse(saved); } catch (Exception e) { return null; }
+    }
+
+    private void clearPendingCameraUri(){
+        cameraImageUri = null;
+        getSharedPreferences("javdan_camera", MODE_PRIVATE).edit()
+                .remove("pending_camera_uri").apply();
+    }
+
+    private long uriSize(Uri u){
+        if (u == null) return 0L;
+        Cursor c = null;
+        try {
+            c = getContentResolver().query(u, new String[]{MediaStore.MediaColumns.SIZE}, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                int ix = c.getColumnIndex(MediaStore.MediaColumns.SIZE);
+                if (ix >= 0) return c.getLong(ix);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        try (InputStream in = getContentResolver().openInputStream(u)) {
+            if (in == null) return 0L;
+            byte[] buf = new byte[8192];
+            long total = 0;
+            int n;
+            while ((n = in.read(buf)) > 0 && total < 65536) total += n;
+            return total;
+        } catch (Exception ignored) { return 0L; }
+    }
+
+    private boolean importCameraPhoto(Uri photoUri){
+        if (photoUri == null) return false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.Images.Media.IS_PENDING,0);
+                try { getContentResolver().update(photoUri,done,null,null); } catch (Exception ignored) {}
+            }
+
+            Bitmap captured = loadBitmapFromUri(photoUri);
+            if (captured == null || captured.getWidth() <= 1 || captured.getHeight() <= 1) return false;
+
+            imageUri = photoUri;
+            currentBitmap = captured;
+            if (status != null) status.setText("عکس دوربین وارد شد");
+            if (previewStatus != null) previewStatus.setText("عکس دوربین آماده پیش‌نمایش است.");
+            if (designer != null) {
+                designer.setProductBitmap(currentBitmap);
+                designer.invalidate();
+            }
+            clearPendingCameraUri();
+            Toast.makeText(this,"عکس دوربین با موفقیت وارد شد",Toast.LENGTH_SHORT).show();
+            return true;
+        } catch (Exception e){
+            Toast.makeText(this,"خطا در خواندن عکس دوربین: "+safeMessage(e),Toast.LENGTH_LONG).show();
+            return false;
+        }
+    }
+
     @Override
     protected void onActivityResult(int req, int result, Intent data){
         super.onActivityResult(req,result,data);
 
-        // Camera apps normally return null Intent data when EXTRA_OUTPUT is used.
-        // Handle the camera result before the generic data-null guard.
+        // With EXTRA_OUTPUT camera apps often return null data. Some OEM camera
+        // apps may even report RESULT_CANCELED although the JPEG was written.
         if (req == TAKE_PHOTO){
-            if (result == RESULT_OK && cameraImageUri != null){
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
-                        ContentValues done = new ContentValues();
-                        done.put(MediaStore.Images.Media.IS_PENDING,0);
-                        getContentResolver().update(cameraImageUri,done,null,null);
-                    }
-                    imageUri = cameraImageUri;
-                    currentBitmap = loadBitmapFromUri(imageUri);
-                    status.setText("عکس با دوربین گرفته شد");
-                    if (designer != null) designer.setProductBitmap(currentBitmap);
-                    cameraImageUri = null;
-                } catch (Exception e){
-                    Toast.makeText(this,"خطا در خواندن عکس دوربین: "+safeMessage(e),Toast.LENGTH_LONG).show();
+            Uri pending = restorePendingCameraUri();
+            boolean fileActuallyExists = pending != null && uriSize(pending) > 0;
+            if ((result == RESULT_OK || fileActuallyExists) && pending != null){
+                if (!importCameraPhoto(pending) && result != RESULT_OK) {
+                    try { getContentResolver().delete(pending,null,null); } catch (Exception ignored) {}
+                    clearPendingCameraUri();
                 }
             } else {
-                if (cameraImageUri != null){
-                    try { getContentResolver().delete(cameraImageUri,null,null); } catch (Exception ignored){}
-                    cameraImageUri = null;
+                if (pending != null){
+                    try { getContentResolver().delete(pending,null,null); } catch (Exception ignored) {}
                 }
+                clearPendingCameraUri();
             }
             return;
         }
