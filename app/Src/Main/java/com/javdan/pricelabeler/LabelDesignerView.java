@@ -20,6 +20,17 @@ public class LabelDesignerView extends View {
     public static final int BG_PATTERN = 2;
     public static final int BG_IMAGE = 3;
 
+    /**
+     * Canonical design canvas. Preview and export MUST keep this exact aspect ratio.
+     * Preview is only a scaled view of this logical canvas; export is a higher-resolution
+     * rendering of the same canvas.
+     */
+    public static final float DESIGN_WIDTH = 1000f;
+    public static final float DESIGN_HEIGHT = 730f;
+    public static final float DESIGN_ASPECT = DESIGN_WIDTH / DESIGN_HEIGHT;
+    public static final int EXPORT_WIDTH = 2000;
+    public static final int EXPORT_HEIGHT = Math.round(EXPORT_WIDTH / DESIGN_ASPECT);
+
     public interface Listener {
         void onFieldSelected(int index);
         void onChanged();
@@ -118,6 +129,25 @@ public class LabelDesignerView extends View {
         invalidate();
     }
 
+    @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int widthMode = MeasureSpec.getMode(widthMeasureSpec);
+        int widthSize = MeasureSpec.getSize(widthMeasureSpec);
+        int heightMode = MeasureSpec.getMode(heightMeasureSpec);
+        int heightSize = MeasureSpec.getSize(heightMeasureSpec);
+
+        int width;
+        if (widthMode == MeasureSpec.UNSPECIFIED) width = Math.round(DESIGN_WIDTH);
+        else width = Math.max(1, widthSize);
+
+        int desiredHeight = Math.max(1, Math.round(width / DESIGN_ASPECT));
+        int height = desiredHeight;
+        if (heightMode == MeasureSpec.AT_MOST) height = Math.min(desiredHeight, heightSize);
+        // Even if a legacy parent supplied an EXACT height, keep the canonical aspect ratio.
+        // MainActivity v3.1 uses WRAP_CONTENT, so this branch is only for backward compatibility.
+
+        setMeasuredDimension(width, Math.max(1, height));
+    }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (getWidth() <= 0 || getHeight() <= 0) return;
@@ -128,7 +158,7 @@ public class LabelDesignerView extends View {
     private void renderScene(Canvas canvas, float w, float h, Bitmap source, boolean editorOverlay) {
         drawBackground(canvas, w, h);
 
-        RectF productRect = computeProductRect(w, h);
+        RectF productRect = computeProductRect(w, h, source);
         if (editorOverlay) previewProductRect.set(productRect);
         drawProduct(canvas, source, productRect);
 
@@ -152,12 +182,36 @@ public class LabelDesignerView extends View {
         if (editorOverlay && cropMode) drawCropOverlay(canvas, productRect, source);
     }
 
-    private RectF computeProductRect(float w, float h) {
-        float pw = clamp(productW * productZoom, .03f, 1.5f) * w;
-        float ph = clamp(productH * productZoom, .03f, 1.5f) * h;
+    /**
+     * Computes the actual drawn product rectangle. productW/productH define a bounding box,
+     * while the bitmap itself is FIT_CENTER inside that box so its aspect ratio is never
+     * distorted. This is critical for Preview == Export.
+     */
+    private RectF computeProductRect(float w, float h, Bitmap source) {
+        float boxW = clamp(productW * productZoom, .03f, 1.5f) * w;
+        float boxH = clamp(productH * productZoom, .03f, 1.5f) * h;
         float cx = (productX + productW * .5f) * w;
         float cy = (productY + productH * .5f) * h;
-        return new RectF(cx - pw/2f, cy - ph/2f, cx + pw/2f, cy + ph/2f);
+
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return new RectF(cx - boxW/2f, cy - boxH/2f, cx + boxW/2f, cy + boxH/2f);
+        }
+
+        Rect src = sourceCropRect(source);
+        float srcW = Math.max(1f, src.width());
+        float srcH = Math.max(1f, src.height());
+        float srcAspect = srcW / srcH;
+        float boxAspect = boxW / Math.max(1f, boxH);
+
+        float drawW, drawH;
+        if (srcAspect >= boxAspect) {
+            drawW = boxW;
+            drawH = drawW / srcAspect;
+        } else {
+            drawH = boxH;
+            drawW = drawH * srcAspect;
+        }
+        return new RectF(cx - drawW/2f, cy - drawH/2f, cx + drawW/2f, cy + drawH/2f);
     }
 
     private static class Layout {
@@ -309,10 +363,10 @@ public class LabelDesignerView extends View {
     }
 
     private void drawProduct(Canvas c, Bitmap bmp, RectF dst) {
-        if (bmp == null) return;
+        if (bmp == null || dst.width() <= 0f || dst.height() <= 0f) return;
         Rect src = sourceCropRect(bmp);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        c.save(); c.clipRect(dst); c.drawBitmap(bmp, src, dst, p); c.restore();
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        c.drawBitmap(bmp, src, dst, p);
     }
 
     private Rect sourceCropRect(Bitmap bmp) {
@@ -414,15 +468,28 @@ public class LabelDesignerView extends View {
 
     private int nearestCropHandle(float x,float y){ float[] xs={cropLeft,cropRight,cropRight,cropLeft}, ys={cropTop,cropTop,cropBottom,cropBottom}; float best=Float.MAX_VALUE;int bi=-1;float max=Math.max(45f,Math.min(getWidth(),getHeight())*.06f); for(int i=0;i<4;i++){float px=previewProductRect.left+xs[i]*previewProductRect.width(), py=previewProductRect.top+ys[i]*previewProductRect.height();float d=(float)Math.hypot(x-px,y-py);if(d<best&&d<=max){best=d;bi=i;}}return bi; }
 
-    /** Exact WYSIWYG export. Same normalized renderScene() as onDraw(). */
+    /**
+     * TRUE WYSIWYG export.
+     * The source photo dimensions never determine the output canvas anymore. The editor and
+     * export use the same DESIGN_ASPECT, so all normalized positions, card sizes, fonts, gaps
+     * and backgrounds keep the exact same visual proportions.
+     */
     public Bitmap renderFinal(Bitmap source, int ignoredBackgroundColor, int ignoredBorderColor, boolean append, float widthPercent){
         if(source==null)return null;
-        int outH=Math.max(1,source.getHeight());
-        int outW=Math.max(1,source.getWidth());
-        if(append){ // legacy mode retained; renderer is still shared, only canvas aspect changes intentionally.
-            outW=Math.max(outW+1,Math.round(outW*(1f+clamp(widthPercent,.12f,.70f))));
+
+        int outW = EXPORT_WIDTH;
+        int outH = EXPORT_HEIGHT;
+
+        // Legacy append mode is intentionally preserved. When enabled it extends the canonical
+        // scene to the right; normal Designer output remains strict WYSIWYG.
+        if(append){
+            outW = Math.max(EXPORT_WIDTH + 1, Math.round(EXPORT_WIDTH * (1f + clamp(widthPercent,.12f,.70f))));
         }
-        Bitmap out=Bitmap.createBitmap(outW,outH,Bitmap.Config.ARGB_8888); Canvas canvas=new Canvas(out); renderScene(canvas,outW,outH,source,false); return out;
+
+        Bitmap out=Bitmap.createBitmap(outW,outH,Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(out);
+        renderScene(canvas,outW,outH,source,false);
+        return out;
     }
 
     private int visibleCount(){ int c=0;for(LabelField f:fields)if(f.visible)c++;return Math.max(1,c); }

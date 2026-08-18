@@ -489,7 +489,9 @@ public class MainActivity extends Activity {
         designer.setFields(fields);
         designer.setProductBitmap(currentBitmap);
         designer.setCustomBackgroundBitmap(customBackgroundBitmap);
-        body.addView(designer, new LinearLayout.LayoutParams(-1, 1020));
+        // TRUE WYSIWYG: LabelDesignerView measures itself with the canonical design aspect.
+        // Do not force an arbitrary height here; that was the root cause of Preview/Export drift.
+        body.addView(designer, new LinearLayout.LayoutParams(-1, -2));
 
         designer.setListener(new LabelDesignerView.Listener() {
             @Override public void onFieldSelected(int i) { selectedField=i; showFieldEditor(); }
