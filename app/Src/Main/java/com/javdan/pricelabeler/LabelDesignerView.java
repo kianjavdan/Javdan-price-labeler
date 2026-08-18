@@ -256,8 +256,23 @@ public class LabelDesignerView extends View {
             cardHeights.add(commonCardH);
             totalCardsH += commonCardH;
         }
-        float tagH = outerPad*2f + totalCardsH + gap*Math.max(0, count-1);
-        tagH = Math.min(h*.96f, Math.max(tagH, 40f*logicalScale));
+        // Never let the last card fall outside the panel/canvas.
+        // Previous builds clamped only tagH to 96% of the canvas but kept the original
+        // commonCardH. With four cards this could make card #4 receive a zero/negative
+        // visible rect and disappear in Batch Export. If the natural/manual height does
+        // not fit, shrink ALL visible cards equally so their count/order is preserved.
+        float maxTagH = h * .96f;
+        float chromeH = outerPad * 2f + gap * Math.max(0, count - 1);
+        float maxCommonCardH = Math.max(1f, (maxTagH - chromeH) / Math.max(1, count));
+        if (commonCardH > maxCommonCardH) {
+            commonCardH = maxCommonCardH;
+            totalCardsH = commonCardH * count;
+            cardHeights.clear();
+            for (int i = 0; i < count; i++) cardHeights.add(commonCardH);
+        }
+
+        float tagH = chromeH + totalCardsH;
+        tagH = Math.min(maxTagH, Math.max(tagH, 40f*logicalScale));
 
         float top = clamp(labelY, 0f, 1f) * h;
         if (top + tagH > h) top = Math.max(h*.02f, h - tagH - h*.02f);
@@ -270,7 +285,7 @@ public class LabelDesignerView extends View {
             float ch = cardHeights.get(vi++);
             // If tag was constrained, cards still remain compact and are clipped rather than silently re-laid out.
             RectF r = new RectF(out.outer.left + outerPad, y, out.outer.right - outerPad,
-                    Math.min(out.outer.bottom - outerPad, y + ch));
+                    y + ch);
             out.cards.add(r);
             y += ch + gap;
         }

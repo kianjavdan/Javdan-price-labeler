@@ -1076,15 +1076,76 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private boolean isPriceColumn(String header){
-        if (header == null) return false;
-
-        String h = header.trim()
+    private String normalizeHeaderText(String header){
+        if (header == null) return "";
+        return header.trim()
                 .replace("ي","ی")
                 .replace("ك","ک")
+                .replace("ۀ","ه")
+                .replace("ة","ه")
+                .replace("‌"," ")
+                .replaceAll("\\s+"," ")
                 .toLowerCase(Locale.ROOT);
+    }
 
-        return h.contains("قیمت");
+    /**
+     * Batch price-column detection must not depend only on the literal word «قیمت».
+     * Real customer sheets sometimes use headers such as «مصرف کننده»، «پایه»،
+     * «حجم متوسط» or «حجم بالا». Missing one of those headers previously caused
+     * the corresponding designer card to be REMOVED from batch output.
+     */
+    private boolean isPriceColumn(String header){
+        String h = normalizeHeaderText(header);
+        if (h.isEmpty()) return false;
+
+        if (h.contains("کد") || h.contains("بارکد") || h.contains("نام کالا") || h.contains("شرح کالا"))
+            return false;
+
+        return h.contains("قیمت")
+                || h.contains("مصرف کننده") || h.contains("مصرف‌کننده")
+                || h.equals("پایه") || h.contains("قیمت پایه")
+                || h.contains("حجم متوسط") || h.contains("متوسط")
+                || h.contains("حجم بالا") || h.contains("خرید حجم بالا") || h.contains("عمده")
+                || h.contains("حجم کم") || h.contains("پلن") || h.contains("تخفیف")
+                || h.contains("فروش") || h.contains("همکار");
+    }
+
+    private int priceHeaderScore(String fieldTitle, String header){
+        String f = normalizeHeaderText(fieldTitle);
+        String h = normalizeHeaderText(header);
+        int score = 0;
+        if (f.isEmpty() || h.isEmpty()) return score;
+
+        if ((f.contains("مصرف") && h.contains("مصرف"))) score += 100;
+        if ((f.contains("پایه") && h.contains("پایه"))) score += 100;
+        if ((f.contains("متوسط") && h.contains("متوسط"))) score += 100;
+        if ((f.contains("بالا") && h.contains("بالا"))) score += 100;
+        if ((f.contains("کم") && h.contains("کم"))) score += 100;
+        if (f.equals(h)) score += 200;
+        if (h.contains(f) || f.contains(h)) score += 40;
+        return score;
+    }
+
+    /** Resolve an Excel price column for a designer card without changing card count/order. */
+    private String resolvePriceHeader(LabelField templateField, ArrayList<String> priceHeaders,
+                                      HashSet<String> alreadyUsed, int fallbackIndex){
+        String best = null;
+        int bestScore = 0;
+        for (String h : priceHeaders){
+            if (alreadyUsed.contains(h)) continue;
+            int sc = priceHeaderScore(templateField != null ? templateField.name : "", h);
+            if (sc > bestScore){ bestScore = sc; best = h; }
+        }
+        if (best != null && bestScore > 0) return best;
+
+        // No semantic match: preserve the Excel column order. Prefer the column at the
+        // same designer-card index, then fall back to the next unused detected price column.
+        if (fallbackIndex >= 0 && fallbackIndex < priceHeaders.size()) {
+            String ordered = priceHeaders.get(fallbackIndex);
+            if (!alreadyUsed.contains(ordered)) return ordered;
+        }
+        for (String h : priceHeaders) if (!alreadyUsed.contains(h)) return h;
+        return null;
     }
 
     private void runBatch(){
@@ -1144,19 +1205,36 @@ public class MainActivity extends Activity {
                         }
 
                         ArrayList<LabelField> fs = new ArrayList<>();
+                        HashSet<String> usedPriceHeaders = new HashSet<>();
 
-                        for (int i=0;i<priceHeaders.size();i++){
-                            String h = priceHeaders.get(i);
-                            String raw = row.get(h);
+                        /*
+                         * IMPORTANT: the Designer template owns the number/order of cards.
+                         * Do NOT "continue" and delete a card merely because an Excel cell is blank
+                         * or a header spelling differs. This is what made card #4 disappear in Batch.
+                         */
+                        if (!fields.isEmpty()){
+                            for (int i=0;i<fields.size();i++){
+                                LabelField template = fields.get(i);
+                                String h = resolvePriceHeader(template,priceHeaders,usedPriceHeaders,i);
+                                String raw = h != null ? row.get(h) : null;
+                                if (h != null) usedPriceHeaders.add(h);
 
-                            if (raw == null || raw.trim().isEmpty()) continue;
+                                String value = (raw == null || raw.trim().isEmpty())
+                                        ? ""
+                                        : formatPrice(raw,convert);
 
-                            LabelField f = new LabelField(h.trim(), formatPrice(raw,convert));
-
-                            if (i < fields.size()) copyStyleOnly(fields.get(i),f);
-                            else if (!fields.isEmpty()) copyStyleOnly(fields.get(fields.size()-1),f);
-
-                            fs.add(f);
+                                LabelField f = new LabelField(template.name,value);
+                                copyStyleOnly(template,f);
+                                fs.add(f);
+                            }
+                        } else {
+                            // Compatibility fallback for an old/empty template.
+                            for (String h : priceHeaders){
+                                String raw = row.get(h);
+                                LabelField f = new LabelField(h.trim(),
+                                        (raw == null || raw.trim().isEmpty()) ? "" : formatPrice(raw,convert));
+                                fs.add(f);
+                            }
                         }
 
                         layoutBatchFields(fs);
