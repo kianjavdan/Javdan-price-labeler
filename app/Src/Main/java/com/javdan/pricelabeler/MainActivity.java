@@ -1180,6 +1180,100 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    private void handleCameraResult(final Intent data, final int resultCode, final int attempt){
+        final File pending = pendingCameraFile();
+
+        // Preferred path: full-resolution JPEG written to our provider file.
+        if (pending != null && pending.exists() && pending.length() > 256){
+            if (!importCameraPhoto(pending)) {
+                Toast.makeText(this,"عکس ثبت شد ولی فایل قابل خواندن نبود",Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+
+        // Samsung and some OEM camera apps can close their Activity before the output stream is
+        // fully flushed. Give the provider file a short grace period before using fallbacks.
+        if (attempt < 10){
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable(){
+                @Override public void run(){
+                    handleCameraResult(data, resultCode, attempt + 1);
+                }
+            }, 180L);
+            return;
+        }
+
+        // Fallback 1: some cameras return a readable Uri even when EXTRA_OUTPUT was ignored.
+        try {
+            if (data != null && data.getData() != null){
+                Bitmap returned = loadBitmapFromUri(data.getData());
+                if (returned != null && returned.getWidth() > 1 && returned.getHeight() > 1){
+                    if (saveFallbackCameraBitmap(returned, pending)) return;
+                    applyCameraBitmap(returned, data.getData());
+                    return;
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // Fallback 2: legacy/OEM ACTION_IMAGE_CAPTURE implementations return a Bitmap under
+        // extras["data"]. It is usually a thumbnail, but is much better than dropping the photo.
+        try {
+            if (data != null && data.getExtras() != null){
+                Object o = data.getExtras().get("data");
+                if (o instanceof Bitmap){
+                    Bitmap thumb = (Bitmap)o;
+                    if (thumb.getWidth() > 1 && thumb.getHeight() > 1){
+                        if (saveFallbackCameraBitmap(thumb, pending)) return;
+                        applyCameraBitmap(thumb, null);
+                        Toast.makeText(this,"دوربین فقط نسخه کم‌حجم عکس را برگرداند",Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        long bytes = (pending != null && pending.exists()) ? pending.length() : -1L;
+        Toast.makeText(this,
+                "عکس از دوربین دریافت نشد (حجم فایل: " + bytes + " بایت). لطفاً دوباره امتحان کنید.",
+                Toast.LENGTH_LONG).show();
+    }
+
+    private boolean saveFallbackCameraBitmap(Bitmap bmp, File preferred){
+        if (bmp == null) return false;
+        try {
+            File target = preferred;
+            if (target == null){
+                File dir = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "camera_capture");
+                if (!dir.exists() && !dir.mkdirs()) return false;
+                target = File.createTempFile("Javdan_camera_fallback_", ".jpg", dir);
+            }
+            try (FileOutputStream out = new FileOutputStream(target, false)){
+                if (!bmp.compress(Bitmap.CompressFormat.JPEG, 96, out)) return false;
+                out.flush();
+            }
+            cameraTempPath = target.getAbsolutePath();
+            getSharedPreferences("javdan_camera", MODE_PRIVATE).edit()
+                    .putString("pending_camera_path", cameraTempPath).apply();
+            return importCameraPhoto(target);
+        } catch (Exception e){
+            return false;
+        }
+    }
+
+    private void applyCameraBitmap(Bitmap bmp, Uri sourceUri){
+        if (bmp == null) return;
+        currentBitmap = bmp;
+        imageUri = sourceUri;
+        if (status != null) status.setText("عکس دوربین وارد شد");
+        if (previewStatus != null) previewStatus.setText("عکس دوربین آماده پیش‌نمایش است.");
+        if (designer != null){
+            designer.setProductBitmap(currentBitmap);
+            designer.requestLayout();
+            designer.invalidate();
+        }
+        Toast.makeText(this,"عکس دوربین با موفقیت وارد شد",Toast.LENGTH_SHORT).show();
+    }
+
     @Override
     protected void onActivityResult(int req, int result, Intent data){
         super.onActivityResult(req,result,data);
@@ -1187,17 +1281,10 @@ public class MainActivity extends Activity {
         // The camera writes into our own app-private external file through CameraFileProvider.
         // We trust the actual JPEG file, not OEM-specific result/data behavior.
         if (req == TAKE_PHOTO){
-            File pending = pendingCameraFile();
-            boolean fileActuallyExists = pending != null && pending.exists() && pending.length() > 0;
-            if (fileActuallyExists){
-                if (!importCameraPhoto(pending)) {
-                    Toast.makeText(this,"عکس ثبت شد ولی قابل بارگذاری نبود",Toast.LENGTH_LONG).show();
-                }
-            } else {
-                if (pending != null) pending.delete();
-                clearPendingCamera();
-                Toast.makeText(this,"عکسی از دوربین دریافت نشد",Toast.LENGTH_SHORT).show();
-            }
+            // Some OEM camera apps return before the JPEG stream is fully flushed, and a few
+            // ignore EXTRA_OUTPUT and return either a content Uri or a small Bitmap in data.
+            // Handle all three behaviours instead of assuming one camera implementation.
+            handleCameraResult(data, result, 0);
             return;
         }
 

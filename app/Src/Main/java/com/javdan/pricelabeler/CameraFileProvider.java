@@ -8,6 +8,7 @@ import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
+import android.content.res.AssetFileDescriptor;
 import android.provider.OpenableColumns;
 
 import java.io.File;
@@ -54,10 +55,28 @@ public class CameraFileProvider extends ContentProvider {
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         File file = fileForUri(uri);
-        int flags = mode != null && mode.contains("w")
-                ? ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_TRUNCATE | ParcelFileDescriptor.MODE_WRITE_ONLY
-                : ParcelFileDescriptor.MODE_READ_ONLY;
+        String m = mode == null ? "r" : mode;
+        int flags;
+        if ("r".equals(m)) {
+            flags = ParcelFileDescriptor.MODE_READ_ONLY;
+        } else if ("w".equals(m) || "wt".equals(m)) {
+            flags = ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_TRUNCATE | ParcelFileDescriptor.MODE_WRITE_ONLY;
+        } else if ("wa".equals(m)) {
+            flags = ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_APPEND | ParcelFileDescriptor.MODE_WRITE_ONLY;
+        } else if ("rw".equals(m)) {
+            flags = ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_READ_WRITE;
+        } else if ("rwt".equals(m)) {
+            flags = ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_TRUNCATE | ParcelFileDescriptor.MODE_READ_WRITE;
+        } else {
+            flags = ParcelFileDescriptor.MODE_READ_WRITE | ParcelFileDescriptor.MODE_CREATE;
+        }
         return ParcelFileDescriptor.open(file, flags);
+    }
+
+    @Override
+    public AssetFileDescriptor openAssetFile(Uri uri, String mode) throws FileNotFoundException {
+        ParcelFileDescriptor pfd = openFile(uri, mode);
+        return new AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH);
     }
 
     @Override
