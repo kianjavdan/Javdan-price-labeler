@@ -85,6 +85,8 @@ public class LabelDesignerView extends View {
     /** outer panel inner padding in logical px relative to a 1000px design canvas. */
     public float panelPaddingPx = 10f;
     public boolean autoHeight = true;
+    /** Manual common height for all price cards when Auto Height is disabled, in logical design px. */
+    public float manualCardHeightPx = 130f;
 
     // Legacy compatibility. MainActivity v2 used this normalized field.
     public float fieldGapPct = 0.006f;
@@ -233,15 +235,29 @@ public class LabelDesignerView extends View {
         int count = visibleCount();
         float totalCardsH = 0f;
         ArrayList<Float> cardHeights = new ArrayList<>();
+
+        // All visible cards always share ONE common height.
+        // Auto Height chooses the tallest natural content height so no card clips,
+        // while manual mode uses the user's explicit slider value.
+        float commonCardH;
+        if (autoHeight) {
+            commonCardH = 22f * logicalScale;
+            for (LabelField f : fields) {
+                if (!f.visible) continue;
+                commonCardH = Math.max(commonCardH,
+                        measureCardHeight(f, labelW - 2f*outerPad, logicalScale));
+            }
+        } else {
+            commonCardH = Math.max(35f, manualCardHeightPx) * logicalScale;
+        }
+
         for (LabelField f : fields) {
             if (!f.visible) continue;
-            float ch = autoHeight ? measureCardHeight(f, labelW - 2f*outerPad, logicalScale)
-                                  : Math.max(60f*logicalScale, h*.13f);
-            cardHeights.add(ch);
-            totalCardsH += ch;
+            cardHeights.add(commonCardH);
+            totalCardsH += commonCardH;
         }
         float tagH = outerPad*2f + totalCardsH + gap*Math.max(0, count-1);
-        tagH = Math.min(h*.96f, Math.max(autoHeight ? tagH : h*.72f, 40f*logicalScale));
+        tagH = Math.min(h*.96f, Math.max(tagH, 40f*logicalScale));
 
         float top = clamp(labelY, 0f, 1f) * h;
         if (top + tagH > h) top = Math.max(h*.02f, h - tagH - h*.02f);

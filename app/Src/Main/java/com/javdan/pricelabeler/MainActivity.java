@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     int settingOuterColor = 0xFF181818;
     int settingOuterBorderColor = 0xFF3A3A3A;
     boolean settingAutoHeight = true;
+    float settingManualCardHeightPx = 130f;
 
     float settingProductX = 0.02f;
     float settingProductY = 0.08f;
@@ -548,7 +549,20 @@ public class MainActivity extends Activity {
         panel.addView(slider("ضخامت حاشیه قاب",0,30,settingOuterBorderWidth,1,"px",v->{settingOuterBorderWidth=Math.round(v);designer.outerTagBorderWidth=settingOuterBorderWidth;designerChanged();}));
         Button outer=colorButton("رنگ قاب اصلی",settingOuterColor);panel.addView(outer);outer.setOnClickListener(v->showColorPalette("رنگ قاب اصلی",settingOuterColor,c->{settingOuterColor=c;designer.outerTagColor=c;refreshColorButton(outer,"رنگ قاب اصلی",c);designerChanged();}));
         Button outerBorder=colorButton("رنگ Border قاب",settingOuterBorderColor);panel.addView(outerBorder);outerBorder.setOnClickListener(v->showColorPalette("رنگ Border قاب",settingOuterBorderColor,c->{settingOuterBorderColor=c;designer.outerTagBorderColor=c;refreshColorButton(outerBorder,"رنگ Border قاب",c);designerChanged();}));
-        CheckBox autoHeight=check("ارتفاع لیبل خودکار (Auto Height)",settingAutoHeight);panel.addView(autoHeight);autoHeight.setOnCheckedChangeListener((b,c)->{settingAutoHeight=c;designer.autoHeight=c;designerChanged();});
+        CheckBox autoHeight=check("ارتفاع لیبل خودکار (Auto Height)",settingAutoHeight); panel.addView(autoHeight);
+        LinearLayout manualHeightSlider = slider("ارتفاع دستی کادرها",35,300,settingManualCardHeightPx,1,"px",v->{
+            settingManualCardHeightPx=v;
+            designer.manualCardHeightPx=v;
+            designerChanged();
+        });
+        panel.addView(manualHeightSlider);
+        manualHeightSlider.setAlpha(settingAutoHeight ? 0.45f : 1f);
+        autoHeight.setOnCheckedChangeListener((b,c)->{
+            settingAutoHeight=c;
+            designer.autoHeight=c;
+            manualHeightSlider.setAlpha(c ? 0.45f : 1f);
+            designerChanged();
+        });
 
         // FIELD EDITOR
         LinearLayout fieldAcc=accordion("تنظیم کادر قیمت انتخاب‌شده",true);body.addView(fieldAcc);
@@ -1268,7 +1282,7 @@ public class MainActivity extends Activity {
         if(d==null)return;
         d.labelWidthPct=settingLabelWidth; d.labelX=settingLabelX; d.labelY=settingLabelY;
         d.fieldGapPct=settingFieldGap; d.fieldGapPx=settingFieldGapPx; d.panelPaddingPx=settingPanelPaddingPx;
-        d.outerTagRadius=settingOuterRadius; d.outerTagBorderWidth=settingOuterBorderWidth; d.outerTagColor=settingOuterColor; d.outerTagBorderColor=settingOuterBorderColor; d.autoHeight=settingAutoHeight;
+        d.outerTagRadius=settingOuterRadius; d.outerTagBorderWidth=settingOuterBorderWidth; d.outerTagColor=settingOuterColor; d.outerTagBorderColor=settingOuterBorderColor; d.autoHeight=settingAutoHeight; d.manualCardHeightPx=settingManualCardHeightPx;
         d.productX=settingProductX; d.productY=settingProductY; d.productW=settingProductW; d.productH=settingProductH; d.productZoom=settingProductZoom;
         d.cropEnabled=settingCropEnabled; d.cropLeft=settingCropLeft; d.cropTop=settingCropTop; d.cropRight=settingCropRight; d.cropBottom=settingCropBottom;
         d.backgroundMode=settingBackgroundMode; d.canvasBackground=settingBackgroundColor; d.gradientColor1=settingGradientColor1; d.gradientColor2=settingGradientColor2; d.gradientAngle=settingGradientAngle; d.backgroundAlpha=settingBackgroundAlpha; d.patternIndex=settingPatternIndex; d.setCustomBackgroundBitmap(customBackgroundBitmap);
@@ -1277,7 +1291,7 @@ public class MainActivity extends Activity {
     private void syncDesignerSettingsFromView(){
         if(designer==null)return;
         settingLabelWidth=designer.labelWidthPct; settingLabelX=designer.labelX; settingLabelY=designer.labelY; settingFieldGap=designer.fieldGapPct; settingFieldGapPx=designer.fieldGapPx; settingPanelPaddingPx=designer.panelPaddingPx;
-        settingOuterRadius=designer.outerTagRadius; settingOuterBorderWidth=designer.outerTagBorderWidth; settingOuterColor=designer.outerTagColor; settingOuterBorderColor=designer.outerTagBorderColor; settingAutoHeight=designer.autoHeight;
+        settingOuterRadius=designer.outerTagRadius; settingOuterBorderWidth=designer.outerTagBorderWidth; settingOuterColor=designer.outerTagColor; settingOuterBorderColor=designer.outerTagBorderColor; settingAutoHeight=designer.autoHeight; settingManualCardHeightPx=designer.manualCardHeightPx;
         settingProductX=designer.productX; settingProductY=designer.productY; settingProductW=designer.productW; settingProductH=designer.productH; settingProductZoom=designer.productZoom;
         settingCropEnabled=designer.cropEnabled; settingCropLeft=designer.cropLeft; settingCropTop=designer.cropTop; settingCropRight=designer.cropRight; settingCropBottom=designer.cropBottom;
         settingBackgroundMode=designer.backgroundMode; settingBackgroundColor=designer.canvasBackground; settingGradientColor1=designer.gradientColor1; settingGradientColor2=designer.gradientColor2; settingGradientAngle=designer.gradientAngle; settingBackgroundAlpha=designer.backgroundAlpha; settingPatternIndex=designer.patternIndex;
@@ -1287,7 +1301,7 @@ public class MainActivity extends Activity {
         getSharedPreferences("javdan",MODE_PRIVATE).edit()
                 .putFloat("labelWidth",settingLabelWidth).putFloat("labelX",settingLabelX).putFloat("labelY",settingLabelY)
                 .putFloat("fieldGap",settingFieldGap).putFloat("fieldGapPx",settingFieldGapPx).putFloat("panelPaddingPx",settingPanelPaddingPx)
-                .putInt("outerRadius",settingOuterRadius).putInt("outerBorderWidth",settingOuterBorderWidth).putInt("outerColor",settingOuterColor).putInt("outerBorderColor",settingOuterBorderColor).putBoolean("autoHeight",settingAutoHeight)
+                .putInt("outerRadius",settingOuterRadius).putInt("outerBorderWidth",settingOuterBorderWidth).putInt("outerColor",settingOuterColor).putInt("outerBorderColor",settingOuterBorderColor).putBoolean("autoHeight",settingAutoHeight).putFloat("manualCardHeightPx",settingManualCardHeightPx)
                 .putFloat("productX",settingProductX).putFloat("productY",settingProductY).putFloat("productW",settingProductW).putFloat("productH",settingProductH).putFloat("productZoom",settingProductZoom)
                 .putBoolean("cropEnabled",settingCropEnabled).putFloat("cropLeft",settingCropLeft).putFloat("cropTop",settingCropTop).putFloat("cropRight",settingCropRight).putFloat("cropBottom",settingCropBottom)
                 .putInt("backgroundMode",settingBackgroundMode).putInt("backgroundColor",settingBackgroundColor).putInt("gradientColor1",settingGradientColor1).putInt("gradientColor2",settingGradientColor2).putFloat("gradientAngle",settingGradientAngle).putInt("backgroundAlpha",settingBackgroundAlpha).putInt("patternIndex",settingPatternIndex).putString("customBackgroundUri",settingCustomBackgroundUri)
@@ -1298,7 +1312,7 @@ public class MainActivity extends Activity {
         android.content.SharedPreferences p=getSharedPreferences("javdan",MODE_PRIVATE);
         settingLabelWidth=p.getFloat("labelWidth",0.28f); settingLabelX=p.getFloat("labelX",0.70f); settingLabelY=p.getFloat("labelY",0.12f);
         settingFieldGap=p.getFloat("fieldGap",0.006f); settingFieldGapPx=p.getFloat("fieldGapPx",6f); settingPanelPaddingPx=p.getFloat("panelPaddingPx",10f);
-        settingOuterRadius=p.getInt("outerRadius",22); settingOuterBorderWidth=p.getInt("outerBorderWidth",3); settingOuterColor=p.getInt("outerColor",0xFF181818); settingOuterBorderColor=p.getInt("outerBorderColor",0xFF3A3A3A); settingAutoHeight=p.getBoolean("autoHeight",true);
+        settingOuterRadius=p.getInt("outerRadius",22); settingOuterBorderWidth=p.getInt("outerBorderWidth",3); settingOuterColor=p.getInt("outerColor",0xFF181818); settingOuterBorderColor=p.getInt("outerBorderColor",0xFF3A3A3A); settingAutoHeight=p.getBoolean("autoHeight",true); settingManualCardHeightPx=p.getFloat("manualCardHeightPx",130f);
         settingProductX=p.getFloat("productX",0.02f); settingProductY=p.getFloat("productY",0.08f); settingProductW=p.getFloat("productW",0.62f); settingProductH=p.getFloat("productH",0.84f); settingProductZoom=p.getFloat("productZoom",1f);
         settingCropEnabled=p.getBoolean("cropEnabled",false); settingCropLeft=p.getFloat("cropLeft",0f); settingCropTop=p.getFloat("cropTop",0f); settingCropRight=p.getFloat("cropRight",1f); settingCropBottom=p.getFloat("cropBottom",1f);
         settingBackgroundMode=p.getInt("backgroundMode",LabelDesignerView.BG_SOLID); settingBackgroundColor=p.getInt("backgroundColor",0xFFF2F2F2); settingGradientColor1=p.getInt("gradientColor1",0xFFFFFFFF); settingGradientColor2=p.getInt("gradientColor2",0xFFE8EEF8); settingGradientAngle=p.getFloat("gradientAngle",0f); settingBackgroundAlpha=p.getInt("backgroundAlpha",255); settingPatternIndex=p.getInt("patternIndex",0); settingCustomBackgroundUri=p.getString("customBackgroundUri","");
