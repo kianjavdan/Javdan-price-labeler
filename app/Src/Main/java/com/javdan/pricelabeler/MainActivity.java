@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
 
     Spinner codeSpinner;
     TextView status, previewStatus;
-    CheckBox rialToToman, appendMode, groupCropCheck;
+    CheckBox rialToToman, appendMode, groupCropCheck, smartSnapCheck, smartSnapBatchCheck;
 
     int selectedField = -1;
 
@@ -79,6 +79,12 @@ public class MainActivity extends Activity {
     float settingCropTop = 0f;
     float settingCropRight = 1f;
     float settingCropBottom = 1f;
+
+    // Smart Product Snap: automatically detects the product bounds independently for each image.
+    boolean settingSmartSnapEnabled = false;
+    boolean settingSmartSnapBatch = true;
+    int settingSmartSnapSensitivity = 62;
+    float settingSmartSnapPaddingPct = 0.035f;
 
     final String[] FONT_VALUES = {"DEFAULT","SANS_SERIF","SERIF","MONOSPACE"};
     final String[] FONT_LABELS = {"پیش‌فرض","Sans Serif","Serif","Monospace"};
@@ -536,6 +542,66 @@ public class MainActivity extends Activity {
         reset.setOnClickListener(v->{designer.resetCrop();designer.setCropMode(true);designerChanged();});
         apply.setOnClickListener(v->{designer.setCropMode(false);designerChanged();});
         groupCropCheck=check("همین Crop روی همه تصاویر خروجی گروهی اعمال شود",true);prod.addView(groupCropCheck);
+
+        // SMART PRODUCT SNAP
+        LinearLayout snapAcc=accordion("Smart Product Snap — برش هوشمند محصول",true);
+        prod.addView(snapAcc);
+        LinearLayout snap=accordionContent(snapAcc);
+        snap.addView(tv("فضای اضافه اطراف محصول را در هر تصویر جداگانه پیدا می‌کند و فقط محدوده محصول را برای Resize/Zoom استفاده می‌کند. برای عکس‌های با پس‌زمینه ساده/یکدست بهترین نتیجه را دارد.",12,false));
+        smartSnapCheck=check("تشخیص و Snap خودکار محصول",settingSmartSnapEnabled);
+        snap.addView(smartSnapCheck);
+        smartSnapCheck.setOnCheckedChangeListener((b,checked)->{
+            settingSmartSnapEnabled=checked;
+            designer.smartSnapEnabled=checked;
+            designer.clearSmartSnapCache();
+            designerChanged();
+        });
+        snap.addView(slider("حساسیت تشخیص",20,120,settingSmartSnapSensitivity,1,"",v->{
+            settingSmartSnapSensitivity=Math.round(v);
+            designer.smartSnapSensitivity=settingSmartSnapSensitivity;
+            designer.clearSmartSnapCache();
+            designerChanged();
+        }));
+        snap.addView(slider("Padding دور محصول",0,20,settingSmartSnapPaddingPct*100f,1,"%",v->{
+            settingSmartSnapPaddingPct=v/100f;
+            designer.smartSnapPaddingPct=settingSmartSnapPaddingPct;
+            designer.clearSmartSnapCache();
+            designerChanged();
+        }));
+        smartSnapBatchCheck=check("برای هر تصویر در خروجی گروهی جداگانه تشخیص بده",settingSmartSnapBatch);
+        snap.addView(smartSnapBatchCheck);
+        smartSnapBatchCheck.setOnCheckedChangeListener((b,checked)->{ settingSmartSnapBatch=checked; saveDesignerSettings(); });
+        LinearLayout sr=row();
+        Button detectNow=btn("تشخیص روی تصویر نمونه");
+        Button snapOff=btn("خاموش / بازنشانی");
+        sr.addView(detectNow,new LinearLayout.LayoutParams(0,-2,1));
+        sr.addView(snapOff,new LinearLayout.LayoutParams(0,-2,1));
+        snap.addView(sr);
+        detectNow.setOnClickListener(v->{
+            if(currentBitmap==null){ Toast.makeText(this,"ابتدا عکس نمونه را انتخاب کن",Toast.LENGTH_SHORT).show(); return; }
+            settingSmartSnapEnabled=true;
+            if(smartSnapCheck!=null) smartSnapCheck.setChecked(true);
+            designer.smartSnapEnabled=true;
+            designer.clearSmartSnapCache();
+            Rect detected=designer.getSmartProductRect(currentBitmap);
+            if(detected!=null){
+                int pct=Math.round(designer.getSmartSnapConfidence()*100f);
+                Toast.makeText(this,"محصول تشخیص داده شد — اطمینان تقریبی "+pct+"%",Toast.LENGTH_SHORT).show();
+            }else{
+                Toast.makeText(this,"تشخیص مطمئن نبود؛ تصویر کامل حفظ شد",Toast.LENGTH_SHORT).show();
+            }
+            designer.invalidate();
+            designerChanged();
+        });
+        snapOff.setOnClickListener(v->{
+            settingSmartSnapEnabled=false;
+            if(smartSnapCheck!=null) smartSnapCheck.setChecked(false);
+            designer.smartSnapEnabled=false;
+            designer.clearSmartSnapCache();
+            designer.invalidate();
+            designerChanged();
+        });
+
         Button sample=btn("انتخاب / تغییر عکس نمونه");prod.addView(sample);sample.setOnClickListener(v->pickFile("image/*",PICK_IMAGE));
 
         // MAIN PANEL
@@ -859,9 +925,14 @@ public class MainActivity extends Activity {
     }
 
     private Bitmap render(Bitmap src, ArrayList<LabelField> useFields, boolean applyCrop){
+        return render(src,useFields,applyCrop,true);
+    }
+
+    private Bitmap render(Bitmap src, ArrayList<LabelField> useFields, boolean applyCrop, boolean applySmartSnap){
         LabelDesignerView r = new LabelDesignerView(this);
         applyDesignerSettingsToView(r);
         r.setFields(useFields);
+        if(!applySmartSnap) r.smartSnapEnabled=false;
 
         if (!applyCrop){
             r.cropEnabled = false;
@@ -1239,7 +1310,7 @@ public class MainActivity extends Activity {
 
                         layoutBatchFields(fs);
 
-                        Bitmap out = render(src,fs,cropAll);
+                        Bitmap out = render(src,fs,cropAll,settingSmartSnapEnabled && settingSmartSnapBatch);
                         saveToGallery(out,code+".jpg");
                         ok++;
 
@@ -1363,6 +1434,7 @@ public class MainActivity extends Activity {
         d.outerTagRadius=settingOuterRadius; d.outerTagBorderWidth=settingOuterBorderWidth; d.outerTagColor=settingOuterColor; d.outerTagBorderColor=settingOuterBorderColor; d.autoHeight=settingAutoHeight; d.manualCardHeightPx=settingManualCardHeightPx;
         d.productX=settingProductX; d.productY=settingProductY; d.productW=settingProductW; d.productH=settingProductH; d.productZoom=settingProductZoom;
         d.cropEnabled=settingCropEnabled; d.cropLeft=settingCropLeft; d.cropTop=settingCropTop; d.cropRight=settingCropRight; d.cropBottom=settingCropBottom;
+        d.smartSnapEnabled=settingSmartSnapEnabled; d.smartSnapSensitivity=settingSmartSnapSensitivity; d.smartSnapPaddingPct=settingSmartSnapPaddingPct;
         d.backgroundMode=settingBackgroundMode; d.canvasBackground=settingBackgroundColor; d.gradientColor1=settingGradientColor1; d.gradientColor2=settingGradientColor2; d.gradientAngle=settingGradientAngle; d.backgroundAlpha=settingBackgroundAlpha; d.patternIndex=settingPatternIndex; d.setCustomBackgroundBitmap(customBackgroundBitmap);
     }
 
@@ -1372,6 +1444,7 @@ public class MainActivity extends Activity {
         settingOuterRadius=designer.outerTagRadius; settingOuterBorderWidth=designer.outerTagBorderWidth; settingOuterColor=designer.outerTagColor; settingOuterBorderColor=designer.outerTagBorderColor; settingAutoHeight=designer.autoHeight; settingManualCardHeightPx=designer.manualCardHeightPx;
         settingProductX=designer.productX; settingProductY=designer.productY; settingProductW=designer.productW; settingProductH=designer.productH; settingProductZoom=designer.productZoom;
         settingCropEnabled=designer.cropEnabled; settingCropLeft=designer.cropLeft; settingCropTop=designer.cropTop; settingCropRight=designer.cropRight; settingCropBottom=designer.cropBottom;
+        settingSmartSnapEnabled=designer.smartSnapEnabled; settingSmartSnapSensitivity=designer.smartSnapSensitivity; settingSmartSnapPaddingPct=designer.smartSnapPaddingPct;
         settingBackgroundMode=designer.backgroundMode; settingBackgroundColor=designer.canvasBackground; settingGradientColor1=designer.gradientColor1; settingGradientColor2=designer.gradientColor2; settingGradientAngle=designer.gradientAngle; settingBackgroundAlpha=designer.backgroundAlpha; settingPatternIndex=designer.patternIndex;
     }
 
@@ -1382,6 +1455,7 @@ public class MainActivity extends Activity {
                 .putInt("outerRadius",settingOuterRadius).putInt("outerBorderWidth",settingOuterBorderWidth).putInt("outerColor",settingOuterColor).putInt("outerBorderColor",settingOuterBorderColor).putBoolean("autoHeight",settingAutoHeight).putFloat("manualCardHeightPx",settingManualCardHeightPx)
                 .putFloat("productX",settingProductX).putFloat("productY",settingProductY).putFloat("productW",settingProductW).putFloat("productH",settingProductH).putFloat("productZoom",settingProductZoom)
                 .putBoolean("cropEnabled",settingCropEnabled).putFloat("cropLeft",settingCropLeft).putFloat("cropTop",settingCropTop).putFloat("cropRight",settingCropRight).putFloat("cropBottom",settingCropBottom)
+                .putBoolean("smartSnapEnabled",settingSmartSnapEnabled).putBoolean("smartSnapBatch",settingSmartSnapBatch).putInt("smartSnapSensitivity",settingSmartSnapSensitivity).putFloat("smartSnapPaddingPct",settingSmartSnapPaddingPct)
                 .putInt("backgroundMode",settingBackgroundMode).putInt("backgroundColor",settingBackgroundColor).putInt("gradientColor1",settingGradientColor1).putInt("gradientColor2",settingGradientColor2).putFloat("gradientAngle",settingGradientAngle).putInt("backgroundAlpha",settingBackgroundAlpha).putInt("patternIndex",settingPatternIndex).putString("customBackgroundUri",settingCustomBackgroundUri)
                 .apply();
     }
@@ -1393,6 +1467,7 @@ public class MainActivity extends Activity {
         settingOuterRadius=p.getInt("outerRadius",22); settingOuterBorderWidth=p.getInt("outerBorderWidth",3); settingOuterColor=p.getInt("outerColor",0xFF181818); settingOuterBorderColor=p.getInt("outerBorderColor",0xFF3A3A3A); settingAutoHeight=p.getBoolean("autoHeight",true); settingManualCardHeightPx=p.getFloat("manualCardHeightPx",130f);
         settingProductX=p.getFloat("productX",0.02f); settingProductY=p.getFloat("productY",0.08f); settingProductW=p.getFloat("productW",0.62f); settingProductH=p.getFloat("productH",0.84f); settingProductZoom=p.getFloat("productZoom",1f);
         settingCropEnabled=p.getBoolean("cropEnabled",false); settingCropLeft=p.getFloat("cropLeft",0f); settingCropTop=p.getFloat("cropTop",0f); settingCropRight=p.getFloat("cropRight",1f); settingCropBottom=p.getFloat("cropBottom",1f);
+        settingSmartSnapEnabled=p.getBoolean("smartSnapEnabled",false); settingSmartSnapBatch=p.getBoolean("smartSnapBatch",true); settingSmartSnapSensitivity=p.getInt("smartSnapSensitivity",62); settingSmartSnapPaddingPct=p.getFloat("smartSnapPaddingPct",0.035f);
         settingBackgroundMode=p.getInt("backgroundMode",LabelDesignerView.BG_SOLID); settingBackgroundColor=p.getInt("backgroundColor",0xFFF2F2F2); settingGradientColor1=p.getInt("gradientColor1",0xFFFFFFFF); settingGradientColor2=p.getInt("gradientColor2",0xFFE8EEF8); settingGradientAngle=p.getFloat("gradientAngle",0f); settingBackgroundAlpha=p.getInt("backgroundAlpha",255); settingPatternIndex=p.getInt("patternIndex",0); settingCustomBackgroundUri=p.getString("customBackgroundUri","");
         if(settingCustomBackgroundUri!=null&&!settingCustomBackgroundUri.isEmpty())try(InputStream in=getContentResolver().openInputStream(Uri.parse(settingCustomBackgroundUri))){customBackgroundBitmap=BitmapFactory.decodeStream(in);}catch(Exception ignored){}
     }

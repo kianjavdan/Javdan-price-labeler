@@ -72,6 +72,17 @@ public class LabelDesignerView extends View {
     private boolean cropMode = false;
     private int cropHandle = -1;
 
+    // Smart Product Snap. This is a fast on-device detector optimized for product photos
+    // on plain / near-plain backgrounds. It runs independently for every Batch image.
+    public boolean smartSnapEnabled = false;
+    public int smartSnapSensitivity = 62;
+    public float smartSnapPaddingPct = 0.035f;
+    private Bitmap smartSnapCacheBitmap = null;
+    private Rect smartSnapCacheRect = null;
+    private int smartSnapCacheSensitivity = -1;
+    private float smartSnapCachePadding = -1f;
+    private float smartSnapConfidence = 0f;
+
     // Main label panel
     public int outerTagColor = 0xFF181818;
     public int outerTagBorderColor = 0xFF3A3A3A;
@@ -103,7 +114,7 @@ public class LabelDesignerView extends View {
     public void setListener(Listener l) { listener = l; }
     public void setFields(ArrayList<LabelField> f) { fields = f == null ? new ArrayList<>() : f; invalidate(); }
     public ArrayList<LabelField> getFields() { return fields; }
-    public void setProductBitmap(Bitmap b) { productBitmap = b; invalidate(); }
+    public void setProductBitmap(Bitmap b) { productBitmap = b; clearSmartSnapCache(); invalidate(); }
     public void setCustomBackgroundBitmap(Bitmap b) { customBackgroundBitmap = b; invalidate(); }
     public void select(int index) { selected = index; invalidate(); }
     public int getSelectedIndex() { return selected; }
@@ -129,6 +140,32 @@ public class LabelDesignerView extends View {
         cropBottom = clamp(b, cropTop + .05f, 1f);
         cropEnabled = true;
         invalidate();
+    }
+
+    public void clearSmartSnapCache() {
+        smartSnapCacheBitmap = null;
+        smartSnapCacheRect = null;
+        smartSnapCacheSensitivity = -1;
+        smartSnapCachePadding = -1f;
+        smartSnapConfidence = 0f;
+    }
+
+    public float getSmartSnapConfidence() { return smartSnapConfidence; }
+
+    /** Returns the automatically detected product bounds in SOURCE bitmap coordinates. */
+    public Rect getSmartProductRect(Bitmap bmp) {
+        if (bmp == null || bmp.getWidth() < 2 || bmp.getHeight() < 2) return null;
+        if (smartSnapCacheBitmap == bmp && smartSnapCacheRect != null
+                && smartSnapCacheSensitivity == smartSnapSensitivity
+                && Math.abs(smartSnapCachePadding-smartSnapPaddingPct) < 0.0001f) {
+            return new Rect(smartSnapCacheRect);
+        }
+        Rect r = detectProductBounds(bmp, smartSnapSensitivity, smartSnapPaddingPct);
+        smartSnapCacheBitmap = bmp;
+        smartSnapCacheRect = r == null ? null : new Rect(r);
+        smartSnapCacheSensitivity = smartSnapSensitivity;
+        smartSnapCachePadding = smartSnapPaddingPct;
+        return r == null ? null : new Rect(r);
     }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -402,11 +439,87 @@ public class LabelDesignerView extends View {
 
     private Rect sourceCropRect(Bitmap bmp) {
         int bw=bmp.getWidth(), bh=bmp.getHeight();
+        if (smartSnapEnabled) {
+            Rect smart = getSmartProductRect(bmp);
+            if (smart != null && smart.width() > 1 && smart.height() > 1) return smart;
+        }
         if (!cropEnabled) return new Rect(0,0,bw,bh);
         int l=Math.max(0,Math.min(bw-1,Math.round(cropLeft*bw)));
         int t=Math.max(0,Math.min(bh-1,Math.round(cropTop*bh)));
         int r=Math.max(l+1,Math.min(bw,Math.round(cropRight*bw)));
         int b=Math.max(t+1,Math.min(bh,Math.round(cropBottom*bh)));
+        return new Rect(l,t,r,b);
+    }
+
+    /**
+     * Fast local foreground detector used by Smart Product Snap.
+     * It estimates the background from border pixels, then finds the dominant foreground
+     * bounding box by color-distance. The operation is sampled so large camera images remain fast.
+     * If the detector is not confident, null is returned and the original image is preserved.
+     */
+    private Rect detectProductBounds(Bitmap bmp, int sensitivity, float paddingPct) {
+        final int bw=bmp.getWidth(), bh=bmp.getHeight();
+        if (bw < 8 || bh < 8) { smartSnapConfidence=0f; return null; }
+
+        int maxSide=Math.max(bw,bh);
+        int step=Math.max(1,maxSide/420); // ~420 samples across the longest side
+        long rs=0, gs=0, bs=0; int bgCount=0;
+        int band=Math.max(1,Math.min(bw,bh)/50);
+
+        // Sample all four border bands. Product images usually expose background here.
+        for(int x=0;x<bw;x+=step){
+            for(int y=0;y<band;y+=Math.max(1,step/2)){ int c=bmp.getPixel(x,y); rs+=Color.red(c);gs+=Color.green(c);bs+=Color.blue(c);bgCount++; }
+            for(int y=Math.max(0,bh-band);y<bh;y+=Math.max(1,step/2)){ int c=bmp.getPixel(x,y); rs+=Color.red(c);gs+=Color.green(c);bs+=Color.blue(c);bgCount++; }
+        }
+        for(int y=band;y<bh-band;y+=step){
+            for(int x=0;x<band;x+=Math.max(1,step/2)){ int c=bmp.getPixel(x,y); rs+=Color.red(c);gs+=Color.green(c);bs+=Color.blue(c);bgCount++; }
+            for(int x=Math.max(0,bw-band);x<bw;x+=Math.max(1,step/2)){ int c=bmp.getPixel(x,y); rs+=Color.red(c);gs+=Color.green(c);bs+=Color.blue(c);bgCount++; }
+        }
+        if(bgCount==0){ smartSnapConfidence=0f; return null; }
+        int br=(int)(rs/bgCount), bg=(int)(gs/bgCount), bb=(int)(bs/bgCount);
+
+        int threshold=clampInt(sensitivity,20,160);
+        int threshold2=threshold*threshold;
+        int minX=bw, minY=bh, maxX=-1, maxY=-1;
+        int fg=0, total=0;
+
+        // Ignore a tiny border halo. This prevents compression noise at the very edge becoming foreground.
+        int halo=Math.max(step,Math.min(bw,bh)/250);
+        for(int y=halo;y<bh-halo;y+=step){
+            for(int x=halo;x<bw-halo;x+=step){
+                int c=bmp.getPixel(x,y); total++;
+                int a=Color.alpha(c);
+                if(a < 24) continue;
+                int dr=Color.red(c)-br, dg=Color.green(c)-bg, db=Color.blue(c)-bb;
+                int dist2=dr*dr+dg*dg+db*db;
+                // Alpha or strong color/luma departure from the estimated border background = foreground.
+                if(dist2 > threshold2){
+                    fg++;
+                    if(x<minX)minX=x; if(x>maxX)maxX=x;
+                    if(y<minY)minY=y; if(y>maxY)maxY=y;
+                }
+            }
+        }
+        if(fg < 12 || maxX<=minX || maxY<=minY){ smartSnapConfidence=0f; return null; }
+
+        // Reject detections that are effectively the entire frame: likely a complex background.
+        float boxArea=((maxX-minX+step)*(float)(maxY-minY+step))/(bw*(float)bh);
+        float fgRatio=fg/(float)Math.max(1,total);
+        if(boxArea > .985f || fgRatio > .94f){ smartSnapConfidence=.20f; return null; }
+
+        // Confidence rewards a compact object with enough foreground evidence and some removable margin.
+        float marginGain=1f-boxArea;
+        smartSnapConfidence=clamp(.35f + marginGain*.55f + Math.min(.20f,fgRatio*.35f),0f,1f);
+
+        int padX=Math.round(Math.max(0f,paddingPct)*bw);
+        int padY=Math.round(Math.max(0f,paddingPct)*bh);
+        int l=clampInt(minX-step-padX,0,bw-1);
+        int t=clampInt(minY-step-padY,0,bh-1);
+        int r=clampInt(maxX+step+padX+1,l+1,bw);
+        int b=clampInt(maxY+step+padY+1,t+1,bh);
+
+        // Fail-safe: tiny detections are more likely logos/noise than the intended product.
+        if((r-l) < bw*.08f || (b-t) < bh*.08f){ smartSnapConfidence=.25f; return null; }
         return new Rect(l,t,r,b);
     }
 
