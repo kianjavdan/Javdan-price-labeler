@@ -1,4 +1,3 @@
-6
 package com.javdan.pricelabeler;
 
 import android.content.Context;
