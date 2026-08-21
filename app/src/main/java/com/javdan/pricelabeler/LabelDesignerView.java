@@ -3,6 +3,7 @@ package com.javdan.pricelabeler;
 import android.content.Context;
 import android.graphics.*;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 
 import java.util.ArrayList;
@@ -37,6 +38,19 @@ public class LabelDesignerView extends View {
         void onTextClicked(int fieldIndex, int textType);
     }
 
+    /**
+     * Touch-transform targets. When one of these is active, single-finger drag moves the
+     * target and a two-finger pinch resizes it — this replaces the old X/Y/Width/Zoom
+     * SeekBars for the product image, the main label panel and the info panel.
+     */
+    public static final int TARGET_NONE = -1;
+    public static final int TARGET_PRODUCT = 0;
+    public static final int TARGET_PANEL = 1;
+    public static final int TARGET_INFO = 2;
+    private int transformTarget = TARGET_NONE;
+    private final ScaleGestureDetector scaleDetector;
+    private float xLast, yLast;
+
     private ArrayList<LabelField> fields = new ArrayList<>();
     private ArrayList<InfoField> infoFields = new ArrayList<>();
     private Bitmap productBitmap;
@@ -45,7 +59,9 @@ public class LabelDesignerView extends View {
     private Listener listener;
 
     private final RectF previewProductRect = new RectF();
+    private final RectF previewProductBoxRect = new RectF();
     private final RectF previewLabelRect = new RectF();
+    private final RectF previewInfoRect = new RectF();
     private final ArrayList<RectF> previewCardRects = new ArrayList<>();
 
     // Product transform (normalized canvas coordinates)
@@ -117,9 +133,19 @@ public class LabelDesignerView extends View {
         super(context);
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         setBackgroundColor(Color.TRANSPARENT);
+        scaleDetector = new ScaleGestureDetector(context, new ScaleListener());
     }
 
     public void setListener(Listener l) { listener = l; }
+
+    /** Activates touch move+pinch for one target (product/panel/info), or TARGET_NONE to
+     *  go back to normal tap-to-select-field behavior. Cancels Crop mode if it was active. */
+    public void setTransformTarget(int target) {
+        transformTarget = target;
+        if (target != TARGET_NONE) cropMode = false;
+        invalidate();
+    }
+    public int getTransformTarget() { return transformTarget; }
     public void setFields(ArrayList<LabelField> f) { fields = f == null ? new ArrayList<>() : f; invalidate(); }
     public ArrayList<LabelField> getFields() { return fields; }
     public void setInfoFields(ArrayList<InfoField> f) { infoFields = f == null ? new ArrayList<>() : f; invalidate(); }
@@ -131,6 +157,7 @@ public class LabelDesignerView extends View {
 
     public void setCropMode(boolean enabled) {
         cropMode = enabled;
+        if (enabled) transformTarget = TARGET_NONE;
         if (enabled && !cropEnabled) cropEnabled = true;
         cropHandle = -1;
         invalidate();
@@ -182,7 +209,10 @@ public class LabelDesignerView extends View {
         drawBackground(canvas, w, h);
 
         RectF productRect = computeProductRect(w, h, source);
-        if (editorOverlay) previewProductRect.set(productRect);
+        if (editorOverlay) {
+            previewProductRect.set(productRect);
+            previewProductBoxRect.set(computeProductBoxRect(w, h));
+        }
         drawProduct(canvas, source, productRect);
 
         Layout layout = computeLabelLayout(w, h);
@@ -203,10 +233,25 @@ public class LabelDesignerView extends View {
         }
 
         if (infoPanelEnabled && !infoFields.isEmpty()) {
-            drawProductInfoPanel(canvas, w, h, productRect);
+            InfoLayout infoLayout = computeInfoLayout(w, h, productRect);
+            if (editorOverlay) previewInfoRect.set(infoLayout.outer);
+            drawProductInfoPanelFromLayout(canvas, w, h, infoLayout);
+        } else if (editorOverlay) {
+            previewInfoRect.set(0, 0, 0, 0);
         }
 
         if (editorOverlay && cropMode) drawCropOverlay(canvas, productRect, source);
+        if (editorOverlay && transformTarget != TARGET_NONE) drawTransformOverlay(canvas);
+    }
+
+    /** Bounding box used for the product image (before FIT_CENTER letterboxing). This is the
+     *  rect that touch-drag/pinch manipulates, matching what the old X/Y/W/H/Zoom sliders did. */
+    private RectF computeProductBoxRect(float w, float h) {
+        float boxW = clamp(productW * productZoom, .03f, 1.5f) * w;
+        float boxH = clamp(productH * productZoom, .03f, 1.5f) * h;
+        float cx = (productX + productW * .5f) * w;
+        float cy = (productY + productH * .5f) * h;
+        return new RectF(cx - boxW / 2f, cy - boxH / 2f, cx + boxW / 2f, cy + boxH / 2f);
     }
 
     /**
@@ -345,8 +390,7 @@ public class LabelDesignerView extends View {
         ArrayList<InfoField> ordered = new ArrayList<>();
     }
 
-    private void drawProductInfoPanel(Canvas canvas, float w, float h, RectF productRect) {
-        InfoLayout layout = computeInfoLayout(w, h, productRect);
+    private void drawProductInfoPanelFromLayout(Canvas canvas, float w, float h, InfoLayout layout) {
         if (layout.cards.isEmpty()) return;
 
         float scale = Math.min(w, h) / 1000f;
@@ -707,6 +751,10 @@ public class LabelDesignerView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e){
+        if(transformTarget != TARGET_NONE){
+            scaleDetector.onTouchEvent(e);
+            return onTransformTouch(e);
+        }
         if(cropMode) return onCropTouch(e);
         if(previewCardRects.isEmpty()) return true;
         if(e.getAction()==MotionEvent.ACTION_DOWN){ touchDownX=lastX=e.getX(); touchDownY=lastY=e.getY(); moved=false; selected=-1; int vi=0; for(int i=0;i<fields.size();i++){ if(!fields.get(i).visible)continue; if(vi<previewCardRects.size()&&previewCardRects.get(vi).contains(e.getX(),e.getY())){selected=i;break;} vi++; } if(selected>=0&&listener!=null)listener.onFieldSelected(selected); invalidate(); return true; }
@@ -726,6 +774,90 @@ public class LabelDesignerView extends View {
     }
 
     private int nearestCropHandle(float x,float y){ float[] xs={cropLeft,cropRight,cropRight,cropLeft}, ys={cropTop,cropTop,cropBottom,cropBottom}; float best=Float.MAX_VALUE;int bi=-1;float max=Math.max(45f,Math.min(getWidth(),getHeight())*.06f); for(int i=0;i<4;i++){float px=previewProductRect.left+xs[i]*previewProductRect.width(), py=previewProductRect.top+ys[i]*previewProductRect.height();float d=(float)Math.hypot(x-px,y-py);if(d<best&&d<=max){best=d;bi=i;}}return bi; }
+
+    /**
+     * Touch-transform handling for product / panel / info targets: one-finger drag moves the
+     * target, two-finger pinch (handled by scaleDetector, see ScaleListener) resizes it. This
+     * replaces the position/width/zoom SeekBars for a direct, on-canvas editing experience.
+     */
+    private boolean onTransformTouch(MotionEvent e){
+        int action = e.getActionMasked();
+        float w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0) return true;
+
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            xLast = e.getX(); yLast = e.getY();
+            return true;
+        }
+        if (action == MotionEvent.ACTION_MOVE && e.getPointerCount() == 1 && !scaleDetector.isInProgress()) {
+            float dx = e.getX() - xLast, dy = e.getY() - yLast;
+            xLast = e.getX(); yLast = e.getY();
+            if (transformTarget == TARGET_PRODUCT) {
+                productX = clamp(productX + dx / w, -.9f, .98f);
+                productY = clamp(productY + dy / h, -.9f, .98f);
+            } else if (transformTarget == TARGET_PANEL) {
+                labelX = clamp(labelX + dx / w, -.3f, 1f);
+                labelY = clamp(labelY + dy / h, 0f, 1f);
+            } else if (transformTarget == TARGET_INFO) {
+                infoX = clamp(infoX + dx / w, -.2f, 1f);
+                infoY = clamp(infoY + dy / h, 0f, 1f);
+            }
+            invalidate();
+            return true;
+        }
+        if (action == MotionEvent.ACTION_POINTER_UP) {
+            // Keep tracking the remaining finger so the drag doesn't jump after a pinch ends.
+            int idx = e.getActionIndex() == 0 ? 1 : 0;
+            if (idx < e.getPointerCount()) { xLast = e.getX(idx); yLast = e.getY(idx); }
+            return true;
+        }
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            if (listener != null) listener.onChanged();
+            return true;
+        }
+        return true;
+    }
+
+    private class ScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
+        @Override public boolean onScale(ScaleGestureDetector d) {
+            float f = d.getScaleFactor();
+            if (transformTarget == TARGET_PRODUCT) {
+                productZoom = clamp(productZoom * f, .2f, 3f);
+            } else if (transformTarget == TARGET_PANEL) {
+                labelWidthPct = clamp(labelWidthPct * f, .12f, .70f);
+            } else if (transformTarget == TARGET_INFO) {
+                infoWidthPct = clamp(infoWidthPct * f, .12f, .95f);
+            }
+            invalidate();
+            return true;
+        }
+    }
+
+    /** Dashed selection box + a center "move" knob over whichever target is active. */
+    private void drawTransformOverlay(Canvas c){
+        RectF r = transformTarget == TARGET_PRODUCT ? previewProductBoxRect
+                : transformTarget == TARGET_PANEL ? previewLabelRect
+                : previewInfoRect;
+        if (r == null || r.width() <= 0 || r.height() <= 0) return;
+
+        float unit = Math.min(getWidth(), getHeight());
+        Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG); fill.setColor(0x2600BCD4);
+        c.drawRoundRect(r, 20f, 20f, fill);
+
+        Paint dash = new Paint(Paint.ANTI_ALIAS_FLAG);
+        dash.setStyle(Paint.Style.STROKE);
+        dash.setColor(0xFF00BCD4);
+        dash.setStrokeWidth(Math.max(3f, unit * .004f));
+        dash.setPathEffect(new DashPathEffect(new float[]{18f, 10f}, 0));
+        c.drawRoundRect(r, 20f, 20f, dash);
+
+        float rr = Math.max(14f, unit * .016f);
+        Paint knob = new Paint(Paint.ANTI_ALIAS_FLAG); knob.setColor(0xFF00BCD4);
+        c.drawCircle(r.centerX(), r.centerY(), rr, knob);
+        Paint icon = new Paint(Paint.ANTI_ALIAS_FLAG); icon.setColor(Color.WHITE); icon.setStrokeWidth(Math.max(2f, rr * .18f));
+        c.drawLine(r.centerX() - rr * .5f, r.centerY(), r.centerX() + rr * .5f, r.centerY(), icon);
+        c.drawLine(r.centerX(), r.centerY() - rr * .5f, r.centerX(), r.centerY() + rr * .5f, icon);
+    }
 
     /**
      * TRUE WYSIWYG export.
