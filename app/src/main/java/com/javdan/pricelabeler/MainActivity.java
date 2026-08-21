@@ -256,7 +256,6 @@ public class MainActivity extends Activity {
         }
         b.setBackground(bg);
     }
-
     private LinearLayout accordion(String title, boolean expanded){
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
@@ -495,8 +494,7 @@ public class MainActivity extends Activity {
                 showDesigner();
             });
         }
-    }
-
+                }
     private void makeDefaults(){
         fields.clear();
 
@@ -648,7 +646,6 @@ public class MainActivity extends Activity {
             f.y = top + i*(h+gap);
         }
     }
-
     private void showDesigner(){
         highlightTab(tabDesigner);
         if (manualRows != null && manualRows.getParent() != null) syncManualRows();
@@ -841,9 +838,7 @@ public class MainActivity extends Activity {
         LinearLayout actions=row(); Button add=btn("+ افزودن کادر");Button save=btn("ذخیره Template");actions.addView(add,new LinearLayout.LayoutParams(0,-2,1));actions.addView(save,new LinearLayout.LayoutParams(0,-2,1));body.addView(actions);
         add.setOnClickListener(v->{fields.add(new LabelField("قیمت جدید",""));selectedField=fields.size()-1;designer.setFields(fields);designer.select(selectedField);showFieldEditor();designerChanged();});
         save.setOnClickListener(v->{designerChanged();Toast.makeText(this,"Template ذخیره شد",Toast.LENGTH_SHORT).show();});
-    }
-
-
+                                 }
     private void showInfoFieldEditor(){
         if(infoEditorContainer==null||selectedInfoField<0||selectedInfoField>=infoFields.size())return;
         infoEditorContainer.removeAllViews();
@@ -959,7 +954,6 @@ public class MainActivity extends Activity {
             showDesigner();
         });
     }
-
     private void showFieldEditor(){
         if(fieldEditorContainer==null||selectedField<0||selectedField>=fields.size())return;
         fieldEditorContainer.removeAllViews();
@@ -1080,7 +1074,6 @@ public class MainActivity extends Activity {
 
         dialog.show();
     }
-
     private void showCropDialog(){
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -1836,8 +1829,7 @@ public class MainActivity extends Activity {
             f.h = h;
             f.y = top + i*(h+gap);
         }
-    }
-
+                      }
     private void copyStyleOnly(LabelField from, LabelField to){
         to.titleSize = from.titleSize;
         to.priceSize = from.priceSize;
@@ -1956,4 +1948,110 @@ public class MainActivity extends Activity {
         settingProductX=p.getFloat("productX",0.02f); settingProductY=p.getFloat("productY",0.08f); settingProductW=p.getFloat("productW",0.62f); settingProductH=p.getFloat("productH",0.84f); settingProductZoom=p.getFloat("productZoom",1f);
         settingCropEnabled=p.getBoolean("cropEnabled",false); settingCropLeft=p.getFloat("cropLeft",0f); settingCropTop=p.getFloat("cropTop",0f); settingCropRight=p.getFloat("cropRight",1f); settingCropBottom=p.getFloat("cropBottom",1f);
         settingBackgroundMode=p.getInt("backgroundMode",LabelDesignerView.BG_SOLID); settingBackgroundColor=p.getInt("backgroundColor",0xFFF2F2F2); settingGradientColor1=p.getInt("gradientColor1",0xFFFFFFFF); settingGradientColor2=p.getInt("gradientColor2",0xFFE8EEF8); settingGradientAngle=p.getFloat("gradientAngle",0f); settingBackgroundAlpha=p.getInt("backgroundAlpha",255); settingPatternIndex=p.getInt("patternIndex",0); settingCustomBackgroundUri=p.getString("customBackgroundUri","");
-        settingInfoEnabled=p.getBoolean("infoEnabled",true); settingInfoPositionMode=p.getInt("infoPositionMode",0); settingInfoLayoutMode=p.getInt("infoLayoutMode",2); settingInfoColumns=p.getInt("infoColumns",2); settingInfoWidth=p.getFloat("infoWidth",0.48f); settingInfoX=p.getFloat("infoX",0.10f); settingInfoY=p.getFloat("infoY",0.76f); settingInfoDistance
+        settingInfoEnabled=p.getBoolean("infoEnabled",true); settingInfoPositionMode=p.getInt("infoPositionMode",0); settingInfoLayoutMode=p.getInt("infoLayoutMode",2); settingInfoColumns=p.getInt("infoColumns",2); settingInfoWidth=p.getFloat("infoWidth",0.48f); settingInfoX=p.getFloat("infoX",0.10f); settingInfoY=p.getFloat("infoY",0.76f); settingInfoDistancePx=p.getFloat("infoDistancePx",12f); settingInfoGapPx=p.getFloat("infoGapPx",8f); settingInfoPaddingPx=p.getFloat("infoPaddingPx",10f); settingInfoOuterColor=p.getInt("infoOuterColor",0x00FFFFFF); settingInfoOuterBorderColor=p.getInt("infoOuterBorderColor",0xFF6AAE72); settingInfoOuterBorderWidth=p.getInt("infoOuterBorderWidth",0); settingInfoOuterRadius=p.getInt("infoOuterRadius",18);
+        if(settingCustomBackgroundUri!=null&&!settingCustomBackgroundUri.isEmpty())try(InputStream in=getContentResolver().openInputStream(Uri.parse(settingCustomBackgroundUri))){customBackgroundBitmap=BitmapFactory.decodeStream(in);}catch(Exception ignored){}
+    }
+
+    private void saveTemplate(){
+        try {
+            JSONArray a = new JSONArray();
+            for (LabelField f : fields) a.put(f.toJson());
+
+            JSONArray info = new JSONArray();
+            for (InfoField f : infoFields) info.put(f.toJson());
+
+            getSharedPreferences("javdan",MODE_PRIVATE)
+                    .edit()
+                    .putString("fields",a.toString())
+                    .putString("infoFields",info.toString())
+                    .apply();
+
+        } catch (Exception ignored){}
+    }
+
+    private void loadTemplate(){
+        fields.clear();
+        infoFields.clear();
+
+        android.content.SharedPreferences prefs=getSharedPreferences("javdan",MODE_PRIVATE);
+        String s = prefs.getString("fields","");
+        String infoString = prefs.getString("infoFields","");
+
+        if (!s.isEmpty()){
+            try {
+                JSONArray a = new JSONArray(s);
+                for (int i=0;i<a.length();i++){
+                    fields.add(LabelField.fromJson(a.getJSONObject(i)));
+                }
+            } catch (Exception ignored){}
+        }
+
+        if (!infoString.isEmpty()){
+            try {
+                JSONArray a = new JSONArray(infoString);
+                for(int i=0;i<a.length();i++) infoFields.add(InfoField.fromJson(a.getJSONObject(i)));
+            } catch(Exception ignored){}
+        }
+
+        if (fields.isEmpty()) makeDefaults();
+        if (infoFields.isEmpty()) makeDefaultInfoFields();
+    }
+
+    private int fontIndex(String font){
+        if (font == null) return 0;
+
+        for (int i=0;i<FONT_VALUES.length;i++){
+            if (FONT_VALUES[i].equals(font)) return i;
+        }
+        return 0;
+    }
+
+    private String pct(float value){
+        return String.valueOf(Math.round(value*100f));
+    }
+
+    private float parsePercent(EditText e, float fallback){
+        try {
+            String s = e.getText().toString().trim();
+            if (s.isEmpty()) return fallback;
+            return Float.parseFloat(s)/100f;
+        } catch (Exception ex){
+            return fallback;
+        }
+    }
+
+    private float parseFloat(EditText e, float fallback){
+        try {
+            return Float.parseFloat(e.getText().toString().trim());
+        } catch (Exception ex){
+            return fallback;
+        }
+    }
+
+    private int parseIntSafe(EditText e, int fallback, int min, int max){
+        try {
+            int v = Integer.parseInt(e.getText().toString().trim());
+            return clampInt(v,min,max);
+        } catch (Exception ex){
+            return fallback;
+        }
+    }
+
+    private String colorToHex(int color){
+        return String.format(Locale.US,"#%08X",color);
+    }
+
+    private float clamp(float v, float min, float max){
+        return Math.max(min,Math.min(max,v));
+    }
+
+    private int clampInt(int v, int min, int max){
+        return Math.max(min,Math.min(max,v));
+    }
+
+    private String safeMessage(Exception e){
+        if (e == null) return "خطای نامشخص";
+        String m = e.getMessage();
+        return (m == null || m.trim().isEmpty()) ? e.getClass().getSimpleName() : m;
+    }
+            }
