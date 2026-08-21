@@ -121,7 +121,7 @@ public class MainActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(sp);
-        t.setTextColor(0xFF222222);
+        t.setTextColor(0xFF20302E);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setPadding(8,8,8,8);
         return t;
@@ -129,15 +129,29 @@ public class MainActivity extends Activity {
 
     private TextView section(String s){
         TextView t = tv(s, 17, true);
-        t.setPadding(8,22,8,12);
+        t.setTextColor(0xFF0B6E64);
+        t.setPadding(8,22,8,10);
         return t;
     }
 
+    /** Rounded, elevated "card" button — the app's default button look. */
     private Button btn(String s){
         Button b = new Button(this);
         b.setText(s);
         b.setAllCaps(false);
+        b.setTextColor(0xFF20302E);
+        b.setPadding((int)dp(14),(int)dp(11),(int)dp(14),(int)dp(11));
+        b.setStateListAnimator(null);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(14));
+        bg.setColor(0xFFFFFFFF);
+        b.setBackground(bg);
+        b.setElevation(dp(2.5f));
         return b;
+    }
+
+    private float dp(float value){
+        return value * getResources().getDisplayMetrics().density;
     }
 
     private LinearLayout row(){
@@ -178,6 +192,69 @@ public class MainActivity extends Activity {
             public void onStopTrackingTouch(SeekBar b){}
         });
         return box;
+    }
+
+    private Button transformProductBtn, transformPanelBtn, transformInfoBtn;
+
+    /**
+     * Toolbar that lets the user move/resize the product image, the main label panel and the
+     * info panel directly with their finger on the canvas, instead of the old position/size/
+     * zoom SeekBars: tap a button to select a target, then drag = move, pinch = resize.
+     */
+    private LinearLayout buildTransformToolbar(){
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(0,10,0,14);
+
+        TextView hint = tv("لمسی: یکی از دکمه‌های زیر را بزن، بعد روی تصویر Preview بکش (جابجایی) یا با دو انگشت پینچ کن (تغییر اندازه)",12,false);
+        hint.setTextColor(0xFF00838F);
+        wrap.addView(hint);
+
+        LinearLayout row = row();
+        transformProductBtn = btn("🖼  عکس محصول");
+        transformPanelBtn = btn("🏷  قاب لیبل");
+        transformInfoBtn = btn("ℹ️  قاب اطلاعات");
+        row.addView(transformProductBtn,new LinearLayout.LayoutParams(0,-2,1));
+        row.addView(transformPanelBtn,new LinearLayout.LayoutParams(0,-2,1));
+        row.addView(transformInfoBtn,new LinearLayout.LayoutParams(0,-2,1));
+        wrap.addView(row);
+
+        transformProductBtn.setOnClickListener(v -> toggleTransformTarget(LabelDesignerView.TARGET_PRODUCT));
+        transformPanelBtn.setOnClickListener(v -> toggleTransformTarget(LabelDesignerView.TARGET_PANEL));
+        transformInfoBtn.setOnClickListener(v -> toggleTransformTarget(LabelDesignerView.TARGET_INFO));
+
+        return wrap;
+    }
+
+    private void toggleTransformTarget(int target){
+        if (designer == null) return;
+        boolean turningOn = designer.getTransformTarget() != target;
+        designer.setTransformTarget(turningOn ? target : LabelDesignerView.TARGET_NONE);
+        refreshTransformButtons();
+    }
+
+    private void refreshTransformButtons(){
+        if (designer == null) return;
+        int active = designer.getTransformTarget();
+        styleTransformButton(transformProductBtn, active == LabelDesignerView.TARGET_PRODUCT);
+        styleTransformButton(transformPanelBtn, active == LabelDesignerView.TARGET_PANEL);
+        styleTransformButton(transformInfoBtn, active == LabelDesignerView.TARGET_INFO);
+    }
+
+    private void styleTransformButton(Button b, boolean active){
+        if (b == null) return;
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(14));
+        if (active) {
+            bg.setColor(0xFF00BCD4);
+            b.setTextColor(Color.WHITE);
+            b.setElevation(dp(4));
+        } else {
+            bg.setColor(0xFFEFF3F5);
+            b.setTextColor(0xFF37474F);
+            b.setElevation(0f);
+        }
+        b.setBackground(bg);
     }
 
     private LinearLayout accordion(String title, boolean expanded){
@@ -248,29 +325,50 @@ public class MainActivity extends Activity {
     private void buildUi(){
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(14,14,14,10);
+        GradientDrawable rootBg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xFFEFF6F6, 0xFFDCEAEA});
+        root.setBackground(rootBg);
 
-        root.addView(tv("Javdan Price Labeler",22,true));
-        root.addView(tv("Excel + ورود دستی + طراح حرفه‌ای لیبل",13,false));
+        // Header: teal gradient card with soft shadow — replaces the old plain text banner.
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding((int)dp(18),(int)dp(22),(int)dp(18),(int)dp(20));
+        GradientDrawable headerBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF0B6E64, 0xFF0FA093});
+        header.setBackground(headerBg);
+        header.setElevation(dp(8));
+
+        TextView title = tv("Javdan Price Labeler",23,true);
+        title.setTextColor(Color.WHITE);
+        TextView subtitle = tv("Excel + ورود دستی + طراح حرفه‌ای لیبل",13,false);
+        subtitle.setTextColor(0xFFD7F2EE);
+        header.addView(title);
+        header.addView(subtitle);
+        root.addView(header);
 
         LinearLayout tabs = row();
+        tabs.setPadding((int)dp(12),(int)dp(12),(int)dp(12),(int)dp(4));
         tabData = btn("Excel / دستی");
         tabDesigner = btn("طراح برچسب");
         tabOutput = btn("خروجی");
 
-        tabs.addView(tabData,new LinearLayout.LayoutParams(0,-2,1));
-        tabs.addView(tabDesigner,new LinearLayout.LayoutParams(0,-2,1));
-        tabs.addView(tabOutput,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0,-2,1);
+        tabLp.setMargins((int)dp(4),0,(int)dp(4),0);
+        tabs.addView(tabData,tabLp);
+        tabs.addView(tabDesigner,new LinearLayout.LayoutParams(tabLp));
+        tabs.addView(tabOutput,new LinearLayout.LayoutParams(tabLp));
         root.addView(tabs);
 
         ScrollView sv = new ScrollView(this);
         body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(4,10,4,90);
+        body.setPadding((int)dp(8),(int)dp(10),(int)dp(8),(int)dp(90));
         sv.addView(body);
         root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
 
         status = tv("آفلاین • عکس اصلی تغییر نمی‌کند",12,false);
+        status.setTextColor(0xFF3E5C58);
+        status.setPadding((int)dp(14),(int)dp(6),(int)dp(14),(int)dp(10));
         root.addView(status);
 
         setContentView(root);
@@ -278,6 +376,20 @@ public class MainActivity extends Activity {
         tabData.setOnClickListener(v -> showData());
         tabDesigner.setOnClickListener(v -> showDesigner());
         tabOutput.setOnClickListener(v -> showOutput());
+        highlightTab(tabData);
+    }
+
+    /** Highlights the active tab with a filled accent pill; the others stay flat white cards. */
+    private void highlightTab(Button active){
+        for (Button b : new Button[]{tabData, tabDesigner, tabOutput}){
+            if (b == null) continue;
+            boolean isActive = b == active;
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(dp(16));
+            if (isActive) { bg.setColor(0xFF00BCD4); b.setTextColor(Color.WHITE); b.setElevation(dp(5)); }
+            else { bg.setColor(0xFFFFFFFF); b.setTextColor(0xFF1F3A37); b.setElevation(dp(1)); }
+            b.setBackground(bg);
+        }
     }
 
     private void clear(){
@@ -285,6 +397,7 @@ public class MainActivity extends Activity {
     }
 
     private void showData(){
+        highlightTab(tabData);
         clear();
 
         RadioGroup rg = new RadioGroup(this);
@@ -537,6 +650,7 @@ public class MainActivity extends Activity {
     }
 
     private void showDesigner(){
+        highlightTab(tabDesigner);
         if (manualRows != null && manualRows.getParent() != null) syncManualRows();
         clear();
 
@@ -549,15 +663,33 @@ public class MainActivity extends Activity {
         designer.setInfoFields(infoFields);
         designer.setProductBitmap(currentBitmap);
         designer.setCustomBackgroundBitmap(customBackgroundBitmap);
+
+        // Floating white "card" behind the canvas — gives the WYSIWYG preview real depth
+        // instead of sitting flat against the page background.
+        LinearLayout canvasCard = new LinearLayout(this);
+        canvasCard.setOrientation(LinearLayout.VERTICAL);
+        canvasCard.setPadding((int)dp(6),(int)dp(6),(int)dp(6),(int)dp(6));
+        GradientDrawable canvasCardBg = new GradientDrawable();
+        canvasCardBg.setCornerRadius(dp(18));
+        canvasCardBg.setColor(0xFFFFFFFF);
+        canvasCard.setBackground(canvasCardBg);
+        canvasCard.setElevation(dp(10));
+        LinearLayout.LayoutParams canvasCardLp = new LinearLayout.LayoutParams(-1,-2);
+        canvasCardLp.setMargins(0,(int)dp(4),0,(int)dp(10));
+        canvasCard.setLayoutParams(canvasCardLp);
         // TRUE WYSIWYG: LabelDesignerView measures itself with the canonical design aspect.
         // Do not force an arbitrary height here; that was the root cause of Preview/Export drift.
-        body.addView(designer, new LinearLayout.LayoutParams(-1, -2));
+        canvasCard.addView(designer, new LinearLayout.LayoutParams(-1, -2));
+        body.addView(canvasCard);
 
         designer.setListener(new LabelDesignerView.Listener() {
             @Override public void onFieldSelected(int i) { selectedField=i; showFieldEditor(); }
             @Override public void onChanged() { designerChanged(); }
             @Override public void onTextClicked(int fieldIndex, int textType) { selectedField=fieldIndex; showFieldEditor(); }
         });
+
+        body.addView(buildTransformToolbar());
+        refreshTransformButtons();
 
         // BACKGROUND
         LinearLayout bgAcc=accordion("Background",true); body.addView(bgAcc); LinearLayout bg=accordionContent(bgAcc);
@@ -585,14 +717,18 @@ public class MainActivity extends Activity {
 
         // PRODUCT / CROP
         LinearLayout prodAcc=accordion("Resize + Crop محصول",false);body.addView(prodAcc);LinearLayout prod=accordionContent(prodAcc);
-        prod.addView(slider("موقعیت افقی محصول X",-20,100,settingProductX*100f,1,"%",v->{settingProductX=v/100f;designer.productX=settingProductX;designerChanged();}));
-        prod.addView(slider("موقعیت عمودی محصول Y",-20,100,settingProductY*100f,1,"%",v->{settingProductY=v/100f;designer.productY=settingProductY;designerChanged();}));
-        prod.addView(slider("عرض محصول",5,120,settingProductW*100f,1,"%",v->{settingProductW=v/100f;designer.productW=settingProductW;designerChanged();}));
-        prod.addView(slider("ارتفاع محصول",5,120,settingProductH*100f,1,"%",v->{settingProductH=v/100f;designer.productH=settingProductH;designerChanged();}));
-        prod.addView(slider("Zoom محصول",25,200,settingProductZoom*100f,1,"%",v->{settingProductZoom=v/100f;designer.productZoom=settingProductZoom;designerChanged();}));
+        TextView prodTouchHint = tv("موقعیت، اندازه و Zoom عکس محصول از این پس با انگشت روی Preview تنظیم می‌شود: بالا دکمه «🖼 عکس محصول» را بزن، بعد بکش یا پینچ کن.",12,false);
+        prodTouchHint.setTextColor(0xFF00838F);
+        prod.addView(prodTouchHint);
+        Button resetProductTransform = btn("↺ بازنشانی موقعیت و اندازه عکس");
+        prod.addView(resetProductTransform);
+        resetProductTransform.setOnClickListener(v->{
+            designer.productX=0.02f; designer.productY=0.08f; designer.productW=0.62f; designer.productH=0.84f; designer.productZoom=1f;
+            designerChanged();
+        });
         LinearLayout cr=row();Button crop=btn("✂ Crop تصویر");Button reset=btn("Reset Crop");Button apply=btn("Apply Crop");cr.addView(crop,new LinearLayout.LayoutParams(0,-2,1));cr.addView(reset,new LinearLayout.LayoutParams(0,-2,1));cr.addView(apply,new LinearLayout.LayoutParams(0,-2,1));prod.addView(cr);
-        crop.setOnClickListener(v->{designer.setCropMode(true);Toast.makeText(this,"چهار گوشه Crop را روی Preview بکش",Toast.LENGTH_SHORT).show();});
-        reset.setOnClickListener(v->{designer.resetCrop();designer.setCropMode(true);designerChanged();});
+        crop.setOnClickListener(v->{designer.setCropMode(true);refreshTransformButtons();Toast.makeText(this,"چهار گوشه Crop را روی Preview بکش",Toast.LENGTH_SHORT).show();});
+        reset.setOnClickListener(v->{designer.resetCrop();designer.setCropMode(true);refreshTransformButtons();designerChanged();});
         apply.setOnClickListener(v->{designer.setCropMode(false);designerChanged();});
         groupCropCheck=check("همین Crop روی همه تصاویر خروجی گروهی اعمال شود",true);prod.addView(groupCropCheck);
 
@@ -600,9 +736,15 @@ public class MainActivity extends Activity {
 
         // MAIN PANEL
         LinearLayout panelAcc=accordion("قاب اصلی لیبل",false);body.addView(panelAcc);LinearLayout panel=accordionContent(panelAcc);
-        panel.addView(slider("عرض کل پنل لیبل",12,60,settingLabelWidth*100f,1,"%",v->{settingLabelWidth=v/100f;designer.labelWidthPct=settingLabelWidth;designerChanged();}));
-        panel.addView(slider("موقعیت افقی پنل",0,100,settingLabelX*100f,1,"%",v->{settingLabelX=v/100f;designer.labelX=settingLabelX;designerChanged();}));
-        panel.addView(slider("موقعیت عمودی پنل",0,100,settingLabelY*100f,1,"%",v->{settingLabelY=v/100f;designer.labelY=settingLabelY;designerChanged();}));
+        TextView panelTouchHint = tv("موقعیت و عرض قاب لیبل از این پس با انگشت تنظیم می‌شود: بالا دکمه «🏷 قاب لیبل» را بزن، بعد بکش یا پینچ کن.",12,false);
+        panelTouchHint.setTextColor(0xFF00838F);
+        panel.addView(panelTouchHint);
+        Button resetPanelTransform = btn("↺ بازنشانی موقعیت و عرض قاب لیبل");
+        panel.addView(resetPanelTransform);
+        resetPanelTransform.setOnClickListener(v->{
+            designer.labelWidthPct=0.28f; designer.labelX=0.70f; designer.labelY=0.12f;
+            designerChanged();
+        });
         panel.addView(slider("فاصله بین کادرها",0,40,settingFieldGapPx,1,"px",v->{settingFieldGapPx=v;designer.fieldGapPx=v;designerChanged();}));
         panel.addView(slider("فاصله داخلی قاب اصلی",0,40,settingPanelPaddingPx,1,"px",v->{settingPanelPaddingPx=v;designer.panelPaddingPx=v;designerChanged();}));
         panel.addView(slider("گردی گوشه قاب",0,100,settingOuterRadius,1,"px",v->{settingOuterRadius=Math.round(v);designer.outerTagRadius=settingOuterRadius;designerChanged();}));
@@ -641,9 +783,15 @@ public class MainActivity extends Activity {
         addLabeledSpinner(infoPanel,"چیدمان کادرها",infoLayout);
         infoLayout.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int pos,long id){settingInfoLayoutMode=pos;designer.infoLayoutMode=pos;designerChanged();}});
 
-        infoPanel.addView(slider("عرض قاب اطلاعات",15,95,settingInfoWidth*100f,1,"%",v->{settingInfoWidth=v/100f;designer.infoWidthPct=settingInfoWidth;designerChanged();}));
-        infoPanel.addView(slider("موقعیت افقی قاب اطلاعات",-20,100,settingInfoX*100f,1,"%",v->{settingInfoX=v/100f;designer.infoX=settingInfoX;designerChanged();}));
-        infoPanel.addView(slider("موقعیت عمودی در حالت آزاد",0,100,settingInfoY*100f,1,"%",v->{settingInfoY=v/100f;designer.infoY=settingInfoY;designerChanged();}));
+        TextView infoTouchHint = tv("عرض و موقعیت قاب اطلاعات از این پس با انگشت تنظیم می‌شود: بالا دکمه «ℹ️ قاب اطلاعات» را بزن، بعد بکش یا پینچ کن (موقعیت عمودی فقط در حالت «موقعیت آزاد» اثر دارد).",12,false);
+        infoTouchHint.setTextColor(0xFF00838F);
+        infoPanel.addView(infoTouchHint);
+        Button resetInfoTransform = btn("↺ بازنشانی موقعیت و عرض قاب اطلاعات");
+        infoPanel.addView(resetInfoTransform);
+        resetInfoTransform.setOnClickListener(v->{
+            designer.infoWidthPct=0.48f; designer.infoX=0.10f; designer.infoY=0.76f;
+            designerChanged();
+        });
         infoPanel.addView(slider("فاصله از محصول",0,100,settingInfoDistancePx,1,"px",v->{settingInfoDistancePx=v;designer.infoDistancePx=v;designerChanged();}));
         infoPanel.addView(slider("فاصله بین کادرها",0,40,settingInfoGapPx,1,"px",v->{settingInfoGapPx=v;designer.infoGapPx=v;designerChanged();}));
         infoPanel.addView(slider("Padding قاب اطلاعات",0,40,settingInfoPaddingPx,1,"px",v->{settingInfoPaddingPx=v;designer.infoPaddingPx=v;designerChanged();}));
@@ -1056,6 +1204,7 @@ public class MainActivity extends Activity {
     }
 
     private void showOutput(){
+        highlightTab(tabOutput);
         if (manualRows != null && manualRows.getParent() != null) syncManualRows();
         clear();
 
@@ -1807,110 +1956,4 @@ public class MainActivity extends Activity {
         settingProductX=p.getFloat("productX",0.02f); settingProductY=p.getFloat("productY",0.08f); settingProductW=p.getFloat("productW",0.62f); settingProductH=p.getFloat("productH",0.84f); settingProductZoom=p.getFloat("productZoom",1f);
         settingCropEnabled=p.getBoolean("cropEnabled",false); settingCropLeft=p.getFloat("cropLeft",0f); settingCropTop=p.getFloat("cropTop",0f); settingCropRight=p.getFloat("cropRight",1f); settingCropBottom=p.getFloat("cropBottom",1f);
         settingBackgroundMode=p.getInt("backgroundMode",LabelDesignerView.BG_SOLID); settingBackgroundColor=p.getInt("backgroundColor",0xFFF2F2F2); settingGradientColor1=p.getInt("gradientColor1",0xFFFFFFFF); settingGradientColor2=p.getInt("gradientColor2",0xFFE8EEF8); settingGradientAngle=p.getFloat("gradientAngle",0f); settingBackgroundAlpha=p.getInt("backgroundAlpha",255); settingPatternIndex=p.getInt("patternIndex",0); settingCustomBackgroundUri=p.getString("customBackgroundUri","");
-        settingInfoEnabled=p.getBoolean("infoEnabled",true); settingInfoPositionMode=p.getInt("infoPositionMode",0); settingInfoLayoutMode=p.getInt("infoLayoutMode",2); settingInfoColumns=p.getInt("infoColumns",2); settingInfoWidth=p.getFloat("infoWidth",0.48f); settingInfoX=p.getFloat("infoX",0.10f); settingInfoY=p.getFloat("infoY",0.76f); settingInfoDistancePx=p.getFloat("infoDistancePx",12f); settingInfoGapPx=p.getFloat("infoGapPx",8f); settingInfoPaddingPx=p.getFloat("infoPaddingPx",10f); settingInfoOuterColor=p.getInt("infoOuterColor",0x00FFFFFF); settingInfoOuterBorderColor=p.getInt("infoOuterBorderColor",0xFF6AAE72); settingInfoOuterBorderWidth=p.getInt("infoOuterBorderWidth",0); settingInfoOuterRadius=p.getInt("infoOuterRadius",18);
-        if(settingCustomBackgroundUri!=null&&!settingCustomBackgroundUri.isEmpty())try(InputStream in=getContentResolver().openInputStream(Uri.parse(settingCustomBackgroundUri))){customBackgroundBitmap=BitmapFactory.decodeStream(in);}catch(Exception ignored){}
-    }
-
-    private void saveTemplate(){
-        try {
-            JSONArray a = new JSONArray();
-            for (LabelField f : fields) a.put(f.toJson());
-
-            JSONArray info = new JSONArray();
-            for (InfoField f : infoFields) info.put(f.toJson());
-
-            getSharedPreferences("javdan",MODE_PRIVATE)
-                    .edit()
-                    .putString("fields",a.toString())
-                    .putString("infoFields",info.toString())
-                    .apply();
-
-        } catch (Exception ignored){}
-    }
-
-    private void loadTemplate(){
-        fields.clear();
-        infoFields.clear();
-
-        android.content.SharedPreferences prefs=getSharedPreferences("javdan",MODE_PRIVATE);
-        String s = prefs.getString("fields","");
-        String infoString = prefs.getString("infoFields","");
-
-        if (!s.isEmpty()){
-            try {
-                JSONArray a = new JSONArray(s);
-                for (int i=0;i<a.length();i++){
-                    fields.add(LabelField.fromJson(a.getJSONObject(i)));
-                }
-            } catch (Exception ignored){}
-        }
-
-        if (!infoString.isEmpty()){
-            try {
-                JSONArray a = new JSONArray(infoString);
-                for(int i=0;i<a.length();i++) infoFields.add(InfoField.fromJson(a.getJSONObject(i)));
-            } catch(Exception ignored){}
-        }
-
-        if (fields.isEmpty()) makeDefaults();
-        if (infoFields.isEmpty()) makeDefaultInfoFields();
-    }
-
-    private int fontIndex(String font){
-        if (font == null) return 0;
-
-        for (int i=0;i<FONT_VALUES.length;i++){
-            if (FONT_VALUES[i].equals(font)) return i;
-        }
-        return 0;
-    }
-
-    private String pct(float value){
-        return String.valueOf(Math.round(value*100f));
-    }
-
-    private float parsePercent(EditText e, float fallback){
-        try {
-            String s = e.getText().toString().trim();
-            if (s.isEmpty()) return fallback;
-            return Float.parseFloat(s)/100f;
-        } catch (Exception ex){
-            return fallback;
-        }
-    }
-
-    private float parseFloat(EditText e, float fallback){
-        try {
-            return Float.parseFloat(e.getText().toString().trim());
-        } catch (Exception ex){
-            return fallback;
-        }
-    }
-
-    private int parseIntSafe(EditText e, int fallback, int min, int max){
-        try {
-            int v = Integer.parseInt(e.getText().toString().trim());
-            return clampInt(v,min,max);
-        } catch (Exception ex){
-            return fallback;
-        }
-    }
-
-    private String colorToHex(int color){
-        return String.format(Locale.US,"#%08X",color);
-    }
-
-    private float clamp(float v, float min, float max){
-        return Math.max(min,Math.min(max,v));
-    }
-
-    private int clampInt(int v, int min, int max){
-        return Math.max(min,Math.min(max,v));
-    }
-
-    private String safeMessage(Exception e){
-        if (e == null) return "خطای نامشخص";
-        String m = e.getMessage();
-        return (m == null || m.trim().isEmpty()) ? e.getClass().getSimpleName() : m;
-    }
-}
+        settingInfoEnabled=p.getBoolean("infoEnabled",true); settingInfoPositionMode=p.getInt("infoPositionMode",0); settingInfoLayoutMode=p.getInt("infoLayoutMode",2); settingInfoColumns=p.getInt("infoColumns",2); settingInfoWidth=p.getFloat("infoWidth",0.48f); settingInfoX=p.getFloat("infoX",0.10f); settingInfoY=p.getFloat("infoY",0.76f); settingInfoDistance
